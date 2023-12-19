@@ -122,16 +122,41 @@ class MarketMaker:
         balance, positions = await self.client.fetch_margin_state()
         open_orders = await self.client.fetch_open_orders(self.asset)
 
+        # Fetch current open orders
         sol_position = positions.get(self.asset, None)
 
         # Calculate new limit order prices based on the fair price
         self.limit_bid_price = self.fair_price * (1 - self.edge_bps / 10000)
         self.limit_ask_price = self.fair_price * (1 + self.edge_bps / 10000)
 
+        # Calculate deviations checks for updating quotes
+        bid_deviation = abs(self.limit_bid_price - self.bid_price)
+        ask_deviation = abs(self.limit_ask_price - self.ask_price)
+        bid_deviation_threshold = self.edge_bps / 10000 * self.bid_price
+        ask_deviation_threshold = self.edge_bps / 10000 * self.ask_price
+        bid_deviation_check = bid_deviation > bid_deviation_threshold
+        ask_deviation_check = ask_deviation > ask_deviation_threshold
+
+        print('--' * 20)
         print("Limit Order Prices")
         print('limit_bid_price: ', self.limit_bid_price)
+        print('Current bid price: ', self.bid_price)
+        print('Current fair price: ', self.fair_price)
         print('limit_ask_price: ', self.limit_ask_price)
+        print('Current ask price: ', self.ask_price)
+        print('--' * 20)
+        print('Bid and ask price deltas')
+        print('Bid delta: ', abs(self.bid_price - self.fair_price))
+        print('Ask delta: ', abs(self.ask_price - self.fair_price))
+        print('--' * 20)
+        print('Deviation Checks')
+        print(f"Bid deviation check: {bid_deviation} vs {bid_deviation_threshold}")
+        print(f"Ask deviation check: {ask_deviation} vs {ask_deviation_threshold}")
+        print('--' * 20)
 
+        # Check if we have open orders
+        # if no open orders or only 1 order open (long/short), place new orders at limit prices
+        # This is done to always have 2 orders open
         if not open_orders or len(open_orders) == 1:
             print("No open orders or missing one order. Placing new orders at limit prices.")
             self.bid_price = self.limit_bid_price
@@ -139,37 +164,45 @@ class MarketMaker:
             print("Current bid and ask prices: ", self.bid_price, self.ask_price)
             await self.trigger_order_update()
 
+        # Check if we have a position open
         if sol_position and abs(sol_position.size) > 0:
             print('We have a position. Checking if position is profitable...')
+
+            # Calculate positions profitability
             average_cost_price = sol_position.cost_of_trades / abs(sol_position.size)
             is_position_profitable = (self.fair_price > average_cost_price) if sol_position.size > 0 else (
                     self.fair_price < average_cost_price)
 
-            # Adjust limit orders based on profit factor if profitable, else on market deviation
-            # Inside update_quotes method
-            if is_position_profitable and (
-                    abs(self.limit_bid_price - self.bid_price) > (self.edge_bps / 10000 * self.bid_price) or abs(
-                    self.limit_ask_price - self.ask_price) > (self.edge_bps / 10000 * self.ask_price)):
-                # Update orders
+            # If the positions is profitable, calculate profit factor and adjust limit orders
+            if is_position_profitable:
+                # Calculating profit factor
                 print("Position is profitable. Adjusting limit orders based on profit factor")
-                profit_factor = (self.fair_price - average_cost_price) / average_cost_price if sol_position.size > 0 else (average_cost_price - self.fair_price) / average_cost_price
+                profit_factor = (self.fair_price - average_cost_price) / average_cost_price if sol_position.size > 0 else (average_cost_price - self.fair_price) / average_cost_price # noqa
                 profit_factor = max(0, profit_factor)
                 print(f'Position profit factor: {round(profit_factor, 5) * 100}%')
-                if sol_position.size > 0:  # Long position
-                    print("Long position. Adjusting ask price based on profit factor")
-                    self.limit_ask_price *= (1 - profit_factor * self.edge_bps / 10000)
-                    self.ask_price = self.limit_ask_price
-                else:  # Short position
-                    print("Short position. Adjusting bid price based on profit factor")
-                    self.limit_bid_price *= (1 + profit_factor * self.edge_bps / 10000)
-                    self.bid_price = self.limit_bid_price
-                print("Current bid and ask prices: ", self.bid_price, self.ask_price)
-                await self.trigger_order_update()
-                
+
+                # Check if price has deviated from fair price by edge_bps
+                # This is done to avoid adjusting limit orders every time the OB changes
+                if bid_deviation_check or ask_deviation_check:
+                    print(
+                        "Price deviation is greater than threshold. Adjusting limit orders based on profit factor")
+                    if sol_position.size > 0:  # Long position
+                        print("Long position. Adjusting ask price based on profit factor")
+                        self.limit_ask_price *= (1 - profit_factor * self.edge_bps / 10000)
+                        self.ask_price = self.limit_ask_price
+                    else:  # Short position
+                        print("Short position. Adjusting bid price based on profit factor")
+                        self.limit_bid_price *= (1 + profit_factor * self.edge_bps / 10000)
+                        self.bid_price = self.limit_bid_price
+                    print("Current bid and ask prices: ", self.bid_price, self.ask_price)
+                    await self.trigger_order_update()
+                else:
+                    print("Fair price is within threshold. No need to update quotes")
+                    return
+            # If the position is not profitable, adjust limit orders based on market deviation
             else:
                 print("Position is not profitable. Adjusting limit orders based on market deviation")
-                if abs(self.limit_bid_price - self.bid_price) > (self.edge_bps / 10000 * self.bid_price) or abs(
-                        self.limit_ask_price - self.ask_price) > (self.edge_bps / 10000 * self.ask_price):
+                if bid_deviation_check or ask_deviation_check:
                     print('Price deviation is greater than threshold. Updating quotes')
                     self.bid_price = self.limit_bid_price
                     self.ask_price = self.limit_ask_price
@@ -177,6 +210,7 @@ class MarketMaker:
                     await self.trigger_order_update()
                 print("Fair price is within threshold. No need to update quotes")
                 return
+        # If we have open orders but no position, adjust limit orders based on market deviation
         else:
             print("We have open orders but no position. Adjusting limit orders based on market deviation")
             if abs(self.limit_bid_price - self.bid_price) > (self.edge_bps / 10000 * self.bid_price) or abs(
@@ -228,8 +262,7 @@ class MarketMaker:
     async def run(self):
         try:
             tasks = [
-                asyncio.create_task(self.subscribe_orderbook_midpoint()),
-                # asyncio.create_task(self.subscribe_to_trades()),
+                asyncio.create_task(self.subscribe_orderbook_midpoint())
 
             ]
             # Initialize quotes
@@ -319,8 +352,8 @@ async def main():
     endpoint = args.url if args.url else utils.cluster_endpoint(args.network)
 
     # Load your wallet
-    # KEYPAIR_PATH = "makerkey.json"
-    KEYPAIR_PATH = "murk_protocol.json"
+    KEYPAIR_PATH = "makerkey.json"
+    # KEYPAIR_PATH = "murk_protocol.json"
     with open(KEYPAIR_PATH) as kp_file:
         kp = Keypair.from_json(kp_file.read())
     wallet = anchorpy.Wallet(kp)
