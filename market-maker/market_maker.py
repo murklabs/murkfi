@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import os
 import time
 from datetime import datetime, timedelta
 from typing import List
@@ -11,12 +12,15 @@ from solders.keypair import Keypair
 import anchorpy
 from solana.exceptions import SolanaRpcException
 from solana.rpc.commitment import Commitment, Confirmed
+from solana.rpc.websocket_api import connect
 from solana.rpc.types import TxOpts
 import httpx
 
 from zetamarkets_py import utils
 from zetamarkets_py.client import Client
 from zetamarkets_py.types import Asset, Network, Order, OrderArgs, OrderOptions, OrderType, Side
+from zetamarkets_py.orderbook import Orderbook
+from zetamarkets_py.serum_client.accounts.orderbook import OrderbookAccount
 
 from zetamarkets_py.events import TradeEvent
 
@@ -60,44 +64,96 @@ class MarketMaker:
         open_orders = await client.fetch_open_orders(asset)
         return cls(client, asset, size, edge, offset, open_orders)
 
-    async def subscribe_orderbook_midpoint(self):
+    async def subscribe_orderbook_midpoint_ws(self):
         """
-        Subscribe to the orderbook and update the midpoint on every update
+        Subscribe to the orderbook midpoint over a websocket connection
         :return:
         """
-        bid_task = asyncio.create_task(self.monitor_orderbook(self.asset, Side.Bid))
-        ask_task = asyncio.create_task(self.monitor_orderbook(self.asset, Side.Ask))
-        await asyncio.gather(bid_task, ask_task)
+        ws_endpoint = os.getenv("WS_ENDPOINT", "wss://api.mainnet-beta.solana.com")
 
-    async def subscribe_to_trades(self):
-        """
-        Subscribe to trades and update quotes on every trade
+        bids_address = self.client.exchange.markets[self.asset]._market_state.bids
+        asks_address = self.client.exchange.markets[self.asset]._market_state.asks
 
-        Used to update quotes when we place a trade
-        :return:
-        """
-        print(f"Listening for trades on margin account: {self.client._margin_account_address}")
-        async for tx_events, _ in self.client.subscribe_transactions():
-            for event in tx_events:
-                if isinstance(event, TradeEvent):
-                    print("Trade event: ", event)
-                    await self.update_quotes()  # Update quotes on trade events
+        async with connect(ws_endpoint) as ws:
+            # Subscribe to the first address
+            bids_subscription_future = asyncio.ensure_future(
+                ws.account_subscribe(
+                    bids_address,
+                    commitment=Commitment,
+                    encoding="base64+zstd",
+                )
+            )
 
-    async def monitor_orderbook(self, asset, side):
-        print('Monitoring orderbook...')
-        async for orderbook, _ in self.client.subscribe_orderbook(asset, side):
-            level = orderbook._get_l2(1)[0]
-            if side == Side.Bid:
-                self.bid_price_from_ob = level.price
-            else:
-                self.ask_price_from_ob = level.price
+            # Subscribe to the second address
+            asks_subscription_future = asyncio.ensure_future(
+                ws.account_subscribe(
+                    asks_address,
+                    commitment=Commitment,
+                    encoding="base64+zstd",
+                )
+            )
 
-            self.fair_price = (self.bid_price_from_ob + self.ask_price_from_ob) / 2
-            # print(f"Highest Bid: {self.bid_price}, Lowest Ask: {self.ask_price}, Midpoint: {self.fair_price}")
-            try:
-                asyncio.create_task(self.update_quotes())
-            except Exception as e:
-                print(f"Failed to set initial quotes: {e}")
+            # Wait for both subscriptions to be completed before proceeding
+            await asyncio.gather(bids_subscription_future, asks_subscription_future)
+
+            # Collect subscription IDs
+            subscription_ids = []
+            while len(subscription_ids) < 2:
+                result = (await ws.recv())[0].result
+                # Filter for just the initial subscription id message
+                if isinstance(result, int):
+                    subscription_ids.append(result)
+
+            # Assign subscription IDs to bids and asks
+            bids_subscription_id, asks_subscription_id = subscription_ids
+
+            # Listen for messages related to both subscriptions
+            async for msg in ws:
+                # Decode the bytes received over the websocket based on the account data layout
+                # Bids and asks have the same layout, so we can use the same decoder
+                account = OrderbookAccount.decode(msg[0].result.value.data)
+                # Process the account data
+                side = Side.Bid if msg[0].subscription == bids_subscription_id else Side.Ask
+                orderbook = Orderbook(side, account, self.client.exchange.markets[self.asset]._market_state)
+                print("=" * 20 + side.name + "=" * 20)
+                level = orderbook._get_l2(1)[0]
+                if side == Side.Bid:
+                    self.bid_price_from_ob = level.price
+                else:
+                    self.ask_price_from_ob = level.price
+
+                self.fair_price = (self.bid_price_from_ob + self.ask_price_from_ob) / 2
+
+                try:
+                    asyncio.create_task(self.update_quotes())
+                except Exception as e:
+                    print(f"Failed to set initial quotes: {e}")
+
+    # async def subscribe_orderbook_midpoint(self):
+    #     """
+    #     Subscribe to the orderbook and update the midpoint on every update
+    #     :return:
+    #     """
+    #     bid_task = asyncio.create_task(self.monitor_orderbook(self.asset, Side.Bid))
+    #     ask_task = asyncio.create_task(self.monitor_orderbook(self.asset, Side.Ask))
+    #     await asyncio.gather(bid_task, ask_task)
+    #
+    # async def monitor_orderbook(self, asset, side):
+    #     print('Monitoring orderbook...')
+    #     async for orderbook, _ in self.client.subscribe_orderbook(asset, side):
+    #
+    #         level = orderbook._get_l2(1)[0]
+    #         if side == Side.Bid:
+    #             self.bid_price_from_ob = level.price
+    #         else:
+    #             self.ask_price_from_ob = level.price
+    #
+    #         self.fair_price = (self.bid_price_from_ob + self.ask_price_from_ob) / 2
+    #         # print(f"Highest Bid: {self.bid_price}, Lowest Ask: {self.ask_price}, Midpoint: {self.fair_price}")
+    #         try:
+    #             asyncio.create_task(self.update_quotes())
+    #         except Exception as e:
+    #             print(f"Failed to set initial quotes: {e}")
 
     # TODO:
     # 1) Log open positions and open orders
@@ -130,7 +186,8 @@ class MarketMaker:
         self.limit_ask_price = self.fair_price * (1 + self.edge_bps / 10000)
 
         # Calculate deviations checks for updating quotes
-        bid_deviation = abs(self.limit_bid_price - self.bid_price) # TODO: Difference between limit orders we WANT To place vs current bid/ask prices
+        bid_deviation = abs(
+            self.limit_bid_price - self.bid_price)  # TODO: Difference between limit orders we WANT To place vs current bid/ask prices
         ask_deviation = abs(self.limit_ask_price - self.ask_price)
         bid_deviation_threshold = self.edge_bps / 10000 * self.bid_price
         ask_deviation_threshold = self.edge_bps / 10000 * self.ask_price
@@ -142,8 +199,8 @@ class MarketMaker:
         print('limit_bid_price: ', self.limit_bid_price)
         print('Current bid price: ', self.bid_price)
         print('Current fair price: ', self.fair_price)
-        print('limit_ask_price: ', self.limit_ask_price)
         print('Current ask price: ', self.ask_price)
+        print('limit_ask_price: ', self.limit_ask_price)
         print('--' * 20)
         print('Bid and ask price deltas')
         print('Bid delta: ', abs(self.bid_price - self.fair_price))
@@ -162,7 +219,7 @@ class MarketMaker:
             self.bid_price = self.limit_bid_price
             self.ask_price = self.limit_ask_price
             print("Current bid and ask prices: ", self.bid_price, self.ask_price)
-            await self.trigger_order_update() # Fails
+            await self.trigger_order_update()  # Fails
 
         # Check if we have a position open
         if sol_position and abs(sol_position.size) > 0:
@@ -178,7 +235,8 @@ class MarketMaker:
                 # Calculating profit factor
                 print("Position is profitable. Adjusting limit orders based on profit factor")
                 # The profit_factor is the % difference between the fair price and the avg cost basis
-                profit_factor = (self.fair_price - avg_cost_basis) / avg_cost_basis if sol_position.size > 0 else (avg_cost_basis - self.fair_price) / avg_cost_basis # noqa
+                profit_factor = (self.fair_price - avg_cost_basis) / avg_cost_basis if sol_position.size > 0 else (
+                                                                                                                          avg_cost_basis - self.fair_price) / avg_cost_basis  # noqa
                 # TODO: Redundant check since we know the position is profitable, move profit_factor to be what the if statement is driven off of
                 profit_factor = max(0, profit_factor)
                 print(f'Position profit factor: {round(profit_factor, 5) * 100}%')
@@ -264,7 +322,7 @@ class MarketMaker:
     async def run(self):
         try:
             tasks = [
-                asyncio.create_task(self.subscribe_orderbook_midpoint())
+                asyncio.create_task(self.subscribe_orderbook_midpoint_ws())
             ]
             # Initialize quotes
             while True:
