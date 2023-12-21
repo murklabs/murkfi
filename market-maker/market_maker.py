@@ -99,9 +99,9 @@ class MarketMaker:
             except Exception as e:
                 print(f"Failed to set initial quotes: {e}")
 
-    # TODO
-    # 1)Log open positions and open orders
-    # 2)Wait for a few seconds after placing orders to update quotes
+    # TODO:
+    # 1) Log open positions and open orders
+    # 2) Wait for a few seconds after placing orders to update quotes
     async def update_quotes(self):
         """
         Update limit order quotes based on the current orderbook
@@ -130,7 +130,7 @@ class MarketMaker:
         self.limit_ask_price = self.fair_price * (1 + self.edge_bps / 10000)
 
         # Calculate deviations checks for updating quotes
-        bid_deviation = abs(self.limit_bid_price - self.bid_price)
+        bid_deviation = abs(self.limit_bid_price - self.bid_price) # TODO: Difference between limit orders we WANT To place vs current bid/ask prices
         ask_deviation = abs(self.limit_ask_price - self.ask_price)
         bid_deviation_threshold = self.edge_bps / 10000 * self.bid_price
         ask_deviation_threshold = self.edge_bps / 10000 * self.ask_price
@@ -162,22 +162,24 @@ class MarketMaker:
             self.bid_price = self.limit_bid_price
             self.ask_price = self.limit_ask_price
             print("Current bid and ask prices: ", self.bid_price, self.ask_price)
-            await self.trigger_order_update()
+            await self.trigger_order_update() # Fails
 
         # Check if we have a position open
         if sol_position and abs(sol_position.size) > 0:
             print('We have a position. Checking if position is profitable...')
 
-            # Calculate positions profitability
-            average_cost_price = sol_position.cost_of_trades / abs(sol_position.size)
-            is_position_profitable = (self.fair_price > average_cost_price) if sol_position.size > 0 else (
-                    self.fair_price < average_cost_price)
+            # Compute avg cost basis for position and determine profitability based on previously computer fair mkt price
+            avg_cost_basis = sol_position.cost_of_trades / abs(sol_position.size)
+            is_position_profitable = (self.fair_price > avg_cost_basis) if sol_position.size > 0 else (
+                    self.fair_price < avg_cost_basis)
 
             # If the positions is profitable, calculate profit factor and adjust limit orders
             if is_position_profitable:
                 # Calculating profit factor
                 print("Position is profitable. Adjusting limit orders based on profit factor")
-                profit_factor = (self.fair_price - average_cost_price) / average_cost_price if sol_position.size > 0 else (average_cost_price - self.fair_price) / average_cost_price # noqa
+                # The profit_factor is the % difference between the fair price and the avg cost basis
+                profit_factor = (self.fair_price - avg_cost_basis) / avg_cost_basis if sol_position.size > 0 else (avg_cost_basis - self.fair_price) / avg_cost_basis # noqa
+                # TODO: Redundant check since we know the position is profitable, move profit_factor to be what the if statement is driven off of
                 profit_factor = max(0, profit_factor)
                 print(f'Position profit factor: {round(profit_factor, 5) * 100}%')
 
@@ -263,7 +265,6 @@ class MarketMaker:
         try:
             tasks = [
                 asyncio.create_task(self.subscribe_orderbook_midpoint())
-
             ]
             # Initialize quotes
             while True:
