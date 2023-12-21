@@ -54,6 +54,7 @@ class MarketMaker:
         self.fair_price = 0
         self.limit_bid_price = 0
         self.limit_ask_price = 0
+        self.ws_endpoint = os.getenv("WS_ENDPOINT", "wss://api.mainnet-beta.solana.com")
 
     @classmethod
     async def load(cls, endpoint: str, wallet: anchorpy.Wallet, asset: Asset, size=0.001, edge=20, offset=0,
@@ -69,12 +70,10 @@ class MarketMaker:
         Subscribe to the orderbook midpoint over a websocket connection
         :return:
         """
-        ws_endpoint = os.getenv("WS_ENDPOINT", "wss://api.mainnet-beta.solana.com")
-
         bids_address = self.client.exchange.markets[self.asset]._market_state.bids
         asks_address = self.client.exchange.markets[self.asset]._market_state.asks
 
-        async with connect(ws_endpoint) as ws:
+        async with connect(self.ws_endpoint) as ws:
             # Subscribe to the first address
             bids_subscription_future = asyncio.ensure_future(
                 ws.account_subscribe(
@@ -112,8 +111,18 @@ class MarketMaker:
                 # Decode the bytes received over the websocket based on the account data layout
                 # Bids and asks have the same layout, so we can use the same decoder
                 account = OrderbookAccount.decode(msg[0].result.value.data)
-                # Process the account data
-                side = Side.Bid if msg[0].subscription == bids_subscription_id else Side.Ask
+                # Process the account dataDetermine side based on subscription_id
+                side = None
+                incoming_subscription_id = msg[0].subscription
+                if incoming_subscription_id == bids_subscription_id:
+                    side = Side.Bid
+                elif incoming_subscription_id == asks_subscription_id:
+                    side = Side.Ask
+
+                if side is None:
+                    print(f"Unknown incoming_subscription_id={incoming_subscription_id}, skipping")
+                    continue
+
                 orderbook = Orderbook(side, account, self.client.exchange.markets[self.asset]._market_state)
                 print("=" * 20 + side.name + "=" * 20)
                 level = orderbook._get_l2(1)[0]
