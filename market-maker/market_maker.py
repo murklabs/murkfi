@@ -81,7 +81,7 @@ class MarketMaker:
             bids_subscription_future = asyncio.ensure_future(
                 ws.account_subscribe(
                     bids_address,
-                    commitment=Commitment,
+                    commitment=Confirmed,
                     encoding="base64+zstd",
                 )
             )
@@ -90,7 +90,7 @@ class MarketMaker:
             asks_subscription_future = asyncio.ensure_future(
                 ws.account_subscribe(
                     asks_address,
-                    commitment=Commitment,
+                    commitment=Confirmed,
                     encoding="base64+zstd",
                 )
             )
@@ -127,7 +127,6 @@ class MarketMaker:
                     continue
 
                 orderbook = Orderbook(side, account, self.client.exchange.markets[self.asset]._market_state)
-                print("=" * 20 + side.name + "=" * 20)
                 level = orderbook._get_l2(1)[0]
                 if side == Side.Bid:
                     self.bid_price_from_ob = level.price
@@ -171,9 +170,6 @@ class MarketMaker:
     # 1) Log open positions and open orders
     # 2) Wait for a few seconds after placing orders to update quotes
     async def update_quotes(self):
-        if self.is_update_quotes_enabled is False:
-            print("update_quotes functionality is disabled, skipping")
-            return
 
         """
         Update limit order quotes based on the current orderbook
@@ -226,6 +222,10 @@ class MarketMaker:
         print(f"Bid deviation check: {bid_deviation} vs {bid_deviation_threshold}")
         print(f"Ask deviation check: {ask_deviation} vs {ask_deviation_threshold}")
         print('--' * 20)
+
+        if self.is_update_quotes_enabled is False:
+            print("update_quotes functionality is disabled, skipping")
+            return
 
         # Check if we have open orders
         # if no open orders or only 1 order open (long/short), place new orders at limit prices
