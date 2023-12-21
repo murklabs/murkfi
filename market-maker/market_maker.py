@@ -45,6 +45,7 @@ class MarketMaker:
         self.TIF_DURATION = 120
 
         self._ratelimit_until_ts = 0
+        self.ws_endpoint = os.getenv("WS_ENDPOINT", "wss://api.mainnet-beta.solana.com")
 
         # Get the best bid and ask from open orders
         self.bid_price_from_ob = 0
@@ -54,7 +55,9 @@ class MarketMaker:
         self.fair_price = 0
         self.limit_bid_price = 0
         self.limit_ask_price = 0
-        self.ws_endpoint = os.getenv("WS_ENDPOINT", "wss://api.mainnet-beta.solana.com")
+
+        # Feature flags
+        self.is_update_quotes_enabled = True
 
     @classmethod
     async def load(cls, endpoint: str, wallet: anchorpy.Wallet, asset: Asset, size=0.001, edge=20, offset=0,
@@ -168,6 +171,10 @@ class MarketMaker:
     # 1) Log open positions and open orders
     # 2) Wait for a few seconds after placing orders to update quotes
     async def update_quotes(self):
+        if self.is_update_quotes_enabled is False:
+            print("update_quotes functionality is disabled, skipping")
+            return
+
         """
         Update limit order quotes based on the current orderbook
         :return:
