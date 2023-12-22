@@ -22,6 +22,8 @@ from zetamarkets_py.types import Asset, Network, Order, OrderArgs, OrderOptions,
 from zetamarkets_py.orderbook import Orderbook
 from zetamarkets_py.serum_client.accounts.orderbook import OrderbookAccount
 
+import pandas as pd
+
 from zetamarkets_py.events import TradeEvent
 
 # Initialize logging (optional)
@@ -189,6 +191,7 @@ class MarketMaker:
         # Fetch current inventory
         balance, positions = await self.client.fetch_margin_state()
         open_orders = await self.client.fetch_open_orders(self.asset)
+        summary = await self.client.get_account_risk_summary()
 
         # Fetch current open orders
         sol_position = positions.get(self.asset, None)
@@ -335,10 +338,40 @@ class MarketMaker:
         finally:
             self._is_quoting = False
 
+    async def write_to_csv(self):
+        csv_file_path = "account_summary.csv"
+        while True:
+            await asyncio.sleep(600)  # Wait for 10 minutes
+            try:
+                summary = await self.client.get_account_risk_summary()
+                balance = summary.balance
+                upnl = summary.unrealized_pnl
+                total_balance = balance + upnl
+                current_time = datetime.now()
+
+                # Create a DataFrame for the new data
+                data = {
+                    "Timestamp": [current_time],
+                    "Balance": [balance],
+                    "Unrealized PnL": [upnl],
+                    "Total Balance": [total_balance]
+                }
+                df = pd.DataFrame(data)
+
+                # Check if the file exists to determine if headers should be written
+                if not os.path.isfile(csv_file_path):
+                    df.to_csv(csv_file_path, mode='w', index=False)  # Write with headers
+                else:
+                    df.to_csv(csv_file_path, mode='a', header=False, index=False)  # Append without headers
+
+            except Exception as e:
+                print(f"Error while writing to CSV: {e}")
+
     async def run(self):
         try:
             tasks = [
-                asyncio.create_task(self.subscribe_orderbook_midpoint_ws())
+                asyncio.create_task(self.subscribe_orderbook_midpoint_ws()),
+                asyncio.create_task(self.write_to_csv()),
             ]
             # Initialize quotes
             while True:
