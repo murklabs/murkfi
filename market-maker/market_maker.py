@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 class MarketMaker:
-    def __init__(self, client: Client, asset: Asset, size: float, edge: float, offset: float):
+    def __init__(self, client: Client, asset: Asset, size: float, edge: float, offset: float, is_update_quotes_enabled: bool):
         self.client = client
         self.asset = asset
         self._is_quoting = False
@@ -62,13 +62,37 @@ class MarketMaker:
         self.is_update_quotes_enabled = False
 
     @classmethod
-    async def load(cls, endpoint: str, wallet: anchorpy.Wallet, asset: Asset, size=0.001, edge=20, offset=0,
-                   network=Network.MAINNET, commitment=Confirmed):
+    async def load(cls,
+                   endpoint: str,
+                   keypair: str,
+                   asset: Asset,
+                   size=0.001,
+                   edge=20,
+                   offset=0,
+                   network=Network.MAINNET,
+                   commitment=Confirmed,
+                   update_orders=True,
+    ):
+        if not keypair:
+            raise ValueError("Keypair file path is required")
+
+        # Derive wallet from keypair path in the current directory
+        with open(keypair) as kp_file:
+            kp = Keypair.from_json(kp_file.read())
+        wallet = anchorpy.Wallet(kp)
+
+        # Initialize the client
         tx_opts = TxOpts(skip_preflight=False, skip_confirmation=False, preflight_commitment=commitment)
-        client = await Client.load(endpoint=endpoint, commitment=commitment, wallet=wallet, assets=[asset],
-                                   tx_opts=tx_opts, network=network, log_level=logging.INFO)
-        open_orders = await client.fetch_open_orders(asset)
-        return cls(client, asset, size, edge, offset, open_orders)
+        client = await Client.load(
+            endpoint=endpoint,
+            commitment=commitment,
+            wallet=wallet,
+            assets=[asset],
+            tx_opts=tx_opts,
+            network=network,
+            log_level=logging.INFO)
+
+        return cls(client, asset, size, edge, offset, update_orders)
 
     async def subscribe_orderbook_midpoint_ws(self):
         """
@@ -163,7 +187,7 @@ class MarketMaker:
         # Fetch current inventory
         balance, positions = await self.client.fetch_margin_state()
         open_orders = await self.client.fetch_open_orders(self.asset)
-        summary = await self.client.get_account_risk_summary()
+        # summary = await self.client.get_account_risk_summary()
 
         # Fetch current open orders
         sol_position = positions.get(self.asset, None)
@@ -210,7 +234,7 @@ class MarketMaker:
             self.bid_price = self.limit_bid_price
             self.ask_price = self.limit_ask_price
             print("Current bid and ask prices: ", self.bid_price, self.ask_price)
-            await self.trigger_order_update()  # Fails
+            await self.trigger_order_update()
 
         # Check if we have a position open
         if sol_position and abs(sol_position.size) > 0:
@@ -289,8 +313,9 @@ class MarketMaker:
             print("Placing new orders...")
             print('---------------------')
             print(f"Quoting {self.asset}: ${self.bid_price:.4f}@ ${self.ask_price:.4f} x {self.quote_size}")
+            start_time = datetime.now()
             await self.client.replace_orders_for_market(self.asset, [bid_order, ask_order])
-            print("Orders placed successfully")
+            print("Orders placed successfully. Elapsed time (ms): ", (datetime.now() - start_time).microseconds / 1000)
             print('---------------------')
         except SolanaRpcException as e:
             original_exception = e.__cause__
@@ -421,25 +446,38 @@ async def main():
         help="The quote offset in bps. Defaults to %(default)s bps.",
     )
 
+    parser.add_argument(
+        "-kp",
+        "--keypair",
+        type=str,
+        default="",
+        help="The keypair file name to use for the market maker.",
+    )
+
+    parser.add_argument(
+        "-uo",
+        "--update_orders",
+        type=bool,
+        default=True,
+        help="The feature flag to enable/disable order updates. Defaults to %(default)s.",
+    )
+
     args = parser.parse_args()
 
     # If endpoint is not specified, get it from the network argument
     endpoint = args.url if args.url else utils.cluster_endpoint(args.network)
 
-    args = parser.parse_args()
-
-    endpoint = args.url if args.url else utils.cluster_endpoint(args.network)
-
-    # Load your wallet
-    KEYPAIR_PATH = "makerkey.json"
-    # KEYPAIR_PATH = "murk_protocol.json"
-    with open(KEYPAIR_PATH) as kp_file:
-        kp = Keypair.from_json(kp_file.read())
-    wallet = anchorpy.Wallet(kp)
-
     # Initialize and run the market maker
-    market_maker = await MarketMaker.load(endpoint, wallet, args.asset, args.size,
-                                          args.edge, args.offset, args.network, args.commitment)
+    market_maker = await MarketMaker.load(
+        endpoint,
+        args.keypair,
+        args.asset,
+        args.size,
+        args.edge,
+        args.offset,
+        args.network,
+        args.commitment,
+        args.update_orders)
     await market_maker.run()
 
 
