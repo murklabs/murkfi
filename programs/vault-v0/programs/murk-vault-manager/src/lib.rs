@@ -33,6 +33,8 @@ pub mod murk_vault_manager {
             MurkError::InvalidTokenAccountOwnerError
         );
 
+        msg!("Depositing {} USDC into vault from {}", amount, signer_key);
+
         // Create cpi account transfer instruction
         let cpi_accounts = Transfer {
             from: ctx.accounts.user_token_account.to_account_info(),
@@ -44,7 +46,8 @@ pub mod murk_vault_manager {
         token::transfer(cpi_ctx, amount)?;
 
         // Increment vault balance for read ops
-        ctx.accounts.vault.usdc_balance += amount;
+        let vault = &mut ctx.accounts.vault;
+        vault.usdc_balance += amount;
 
         // Emit event for vault deposit
         emit!(VaultDeposit {
@@ -86,11 +89,13 @@ pub struct CreateVault<'info> {
 pub struct DepositUsdc<'info> {
     #[account(mut)]
     pub vault: Account<'info, Vault>,
+    // Vault USDC token account
     pub vault_token_account: Account<'info, TokenAccount>,
 
-    #[account(
-        constraint = user_token_account.owner == signer.key(),
-    )]
+    // #[account(
+    //     constraint = user_token_account.owner == signer.key(),
+    // )]
+    // User USDC token account
     pub user_token_account: Account<'info, TokenAccount>,
     pub signer: Signer<'info>,
 
@@ -101,7 +106,6 @@ pub struct DepositUsdc<'info> {
 pub struct WithdrawUsdc<'info> {
     #[account(mut)]
     pub vault: Account<'info, Vault>,
-    // Other accounts like token program
 }
 
 /**
