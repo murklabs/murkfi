@@ -122,6 +122,7 @@ const depositUsdc = async (
       tokenProgram: TOKEN_PROGRAM_ID, // FIXME: Suspect this is wrong
     })
     .rpc();
+  console.log("🚀 ~ file: client.ts:125 ~ txnHash:", txnHash);
 
   console.log(`Deposited ${amount} USDC to vault ${vault.toString()}`);
   return txnHash;
