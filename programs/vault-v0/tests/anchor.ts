@@ -22,13 +22,13 @@
 //   getAccount,
 // } from "@solana/spl-token";
 // import { assert } from "chai";
-// import type { MurkBank } from "../target/types/murk_bank";
+// import type { MurkVaultManager } from "../target/types/murk_vault_manager";
 
 // describe("anchor-escrow", () => {
 //   // Configure the client to use the local cluster
 //   anchor.setProvider(anchor.AnchorProvider.env());
 
-//   const program = anchor.workspace.MurkBank as anchor.Program<MurkBank>;
+//   const program = anchor.workspace.MurkVaultManager as anchor.Program<MurkVaultManager>;
 
 //   // Use Mainnet-fork for testing
 //   const commitment: Commitment = "processed"; // processed, confirmed, finalized
