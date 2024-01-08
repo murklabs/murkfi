@@ -1,0 +1,5 @@
+.vscode
+
+# Private keys
+devnet-wallet.json
+murk_protocol.json
