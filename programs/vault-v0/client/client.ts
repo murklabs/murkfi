@@ -100,6 +100,10 @@ const depositUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
     return;
   }
 
+  console.log(
+    "🚀 ~ file: client.ts:105 ~ depositUsdc ~ vault:",
+    vault.toString(),
+  );
   // Program USDC token account
   const vaultTokenAccount = await getOrCreateVaultUsdcAccount(vault); // TODO: Vault is wrong....
   if (!vaultTokenAccount) {
@@ -121,11 +125,11 @@ const depositUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
   console.log(`Deposited ${amount} USDC to vault ${vault.toString()}`);
 };
 
-const getUserUsdcAccount = async (userPubkey: anchor.web3.PublicKey) => {
+const getUserUsdcAccount = async (userKey: anchor.web3.PublicKey) => {
   try {
     const usdcAccount = await getAssociatedTokenAddress(
       new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
-      userPubkey,
+      userKey,
     );
     return usdcAccount;
   } catch (error) {
@@ -133,11 +137,11 @@ const getUserUsdcAccount = async (userPubkey: anchor.web3.PublicKey) => {
   }
 };
 
-const getOrCreateVaultUsdcAccount = async (vault: anchor.web3.PublicKey) => {
+const getOrCreateVaultUsdcAccount = async (vaultKey: anchor.web3.PublicKey) => {
   try {
     const usdcAccount = await getAssociatedTokenAddress(
       new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
-      vault,
+      vaultKey,
     );
     console.log(
       `Vault USDC account already exists, userUsdcAccount=${usdcAccount}`,
@@ -152,7 +156,7 @@ const getOrCreateVaultUsdcAccount = async (vault: anchor.web3.PublicKey) => {
       program.provider.connection,
       wallet.payer,
       new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
-      vault,
+      vaultKey,
     );
 
     return usdcAccount;
@@ -168,12 +172,12 @@ const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
 
 const main = async () => {
   console.log("Starting client...");
-  const vaultPubkey = await createVault();
+  const vaultKey = await createVault();
 
   let balance = await getVaultBalanceById(VAULT_ID);
   console.log("Vault USDC balance:", balance.toNumber());
 
-  await depositUsdc(vaultPubkey, 1);
+  await depositUsdc(vaultKey, 1);
 
   balance = await getVaultBalanceById(VAULT_ID);
   console.log("Vault USDC balance:", balance.toNumber());
