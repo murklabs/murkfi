@@ -8,6 +8,7 @@ pub mod murk_vault_manager {
     use super::*;
 
     pub fn create_vault(ctx: Context<CreateVault>, id: u64) -> Result<()> {
+        // Setup vault
         let vault = &mut ctx.accounts.vault;
         vault.id = id;
         vault.creator = *ctx.accounts.authority.key;
@@ -35,7 +36,7 @@ pub mod murk_vault_manager {
         // Create cpi account transfer instruction
         let cpi_accounts = Transfer {
             from: ctx.accounts.user_token_account.to_account_info(),
-            to: ctx.accounts.vault.to_account_info(),
+            to: ctx.accounts.vault_token_account.to_account_info(),
             authority: ctx.accounts.signer.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.to_account_info();
@@ -85,9 +86,9 @@ pub struct CreateVault<'info> {
 pub struct DepositUsdc<'info> {
     #[account(mut)]
     pub vault: Account<'info, Vault>,
+    pub vault_token_account: Account<'info, TokenAccount>,
 
     #[account(
-        mut,
         constraint = user_token_account.owner == signer.key(),
     )]
     pub user_token_account: Account<'info, TokenAccount>,
