@@ -90,12 +90,14 @@ pub struct DepositUsdc<'info> {
     #[account(mut)]
     pub vault: Account<'info, Vault>,
     // Vault USDC token account
+    #[account(mut)]
     pub vault_token_account: Account<'info, TokenAccount>,
 
     // #[account(
     //     constraint = user_token_account.owner == signer.key(),
     // )]
     // User USDC token account
+    #[account(mut)]
     pub user_token_account: Account<'info, TokenAccount>,
     pub signer: Signer<'info>,
 
