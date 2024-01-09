@@ -3,8 +3,8 @@ import * as web3 from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import {
   getAssociatedTokenAddress,
-  createAssociatedTokenAccount,
   TOKEN_PROGRAM_ID,
+  getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
 import type { MurkVaultManager } from "../target/types/murk_vault_manager";
 import { Connection, Keypair } from "@solana/web3.js";
@@ -139,31 +139,34 @@ const getUserUsdcAccount = async (userKey: anchor.web3.PublicKey) => {
 
 const getOrCreateVaultUsdcAccount = async (vaultKey: anchor.web3.PublicKey) => {
   try {
-    const usdcAccount = await getAssociatedTokenAddress(
+    const vaultUsdcAccount = await getAssociatedTokenAddress(
       new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
       vaultKey,
       true,
     );
-    console.log(
-      `Vault USDC account already exists, vaultUsdcTokenAccount=${usdcAccount}`,
-    );
-    return usdcAccount;
-  } catch (err) {
-    console.log("Vault USDC account does not exist, creating...");
-  }
 
-  try {
-    const usdcAccount = await createAssociatedTokenAccount(
+    const vaultUsdcAccountInfo =
+      await connection.getAccountInfo(vaultUsdcAccount);
+    if (vaultUsdcAccountInfo) {
+      console.log(
+        `Vault USDC account already exists, vaultUsdcTokenAccount=${vaultUsdcAccount}`,
+      );
+      return vaultUsdcAccount;
+    }
+
+    console.log("Vault USDC account does not exist, creating...");
+    const newVaultUsdcAccount = await getOrCreateAssociatedTokenAccount(
       program.provider.connection,
       wallet.payer,
       new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
       vaultKey,
+      true,
     );
 
     console.log(
-      `Vault USDC account created, vaultUsdcTokenAccount=${usdcAccount}`,
+      `Vault USDC account created, vaultUsdcTokenAccount=${newVaultUsdcAccount}`,
     );
-    return usdcAccount;
+    return vaultUsdcAccount;
   } catch (err) {
     console.log("Error creating program USDC account, error=", err);
   }

@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("HLniiF5rZHiGWtoiGQgYBCvEQjejEhCz1cDupe5MAxtK");
+declare_id!("4ccQd4R1Z8yrb7am6qHyB6TPAwMD2Gp4cxhz1ZShHoQR");
 
 #[program]
 pub mod murk_vault_manager {
@@ -89,14 +89,12 @@ pub struct CreateVault<'info> {
 pub struct DepositUsdc<'info> {
     #[account(mut)]
     pub vault: Account<'info, Vault>,
-    // Vault USDC token account
     #[account(mut)]
     pub vault_token_account: Account<'info, TokenAccount>,
 
-    // #[account(
-    //     constraint = user_token_account.owner == signer.key(),
-    // )]
-    // User USDC token account
+    #[account(
+        constraint = user_token_account.owner == signer.key(),
+    )]
     #[account(mut)]
     pub user_token_account: Account<'info, TokenAccount>,
     pub signer: Signer<'info>,

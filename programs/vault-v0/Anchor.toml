@@ -3,7 +3,7 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-murk_vault_manager = "HLniiF5rZHiGWtoiGQgYBCvEQjejEhCz1cDupe5MAxtK"
+murk_vault_manager = "4ccQd4R1Z8yrb7am6qHyB6TPAwMD2Gp4cxhz1ZShHoQR"
 
 [registry]
 url = "https://api.apr.dev"
