@@ -27,10 +27,11 @@ const opts: web3.ConfirmOptions = {
 const provider = new anchor.AnchorProvider(connection, wallet, opts);
 anchor.setProvider(provider);
 
-const program = anchor.workspace.MurkBank as anchor.Program<MurkVaultManager>;
+const program = anchor.workspace
+  .MurkVaultManager as anchor.Program<MurkVaultManager>;
 
 // Devnet test token address
-const USDC_MINT_ADDRESS = "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr";
+const USDC_MINT_ADDRESS = "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr"; // https://solscan.io/address/3ApJ7QVfy4qMDfbGS5DfdSBDoZuyV6vtPKHLwpravXDV?cluster=devnet
 const VAULT_ID = 1;
 
 // getNumberDecimals gets the decimal numbers for a given SPL token
@@ -42,10 +43,6 @@ const getNumberDecimals = async (mintAddress: string): Promise<number> => {
   return (info.value?.data as anchor.web3.ParsedAccountData).parsed.info
     .decimals as number;
 };
-
-const vaultProgramId = new anchor.web3.PublicKey(
-  "HLniiF5rZHiGWtoiGQgYBCvEQjejEhCz1cDupe5MAxtK",
-);
 
 // createVault gets a vault account program address and creates the vault
 const createVault = async (): Promise<anchor.web3.PublicKey> => {
@@ -64,7 +61,7 @@ const createVault = async (): Promise<anchor.web3.PublicKey> => {
       `Vault already exists, id=${vaultAccount.id}, accountAddress=${vaultAccountAddress}`,
     );
   } catch {
-    await program.methods
+    const txnHash = await program.methods
       .createVault(new anchor.BN(VAULT_ID))
       .accounts({
         authority: program.provider.publicKey,
@@ -74,7 +71,7 @@ const createVault = async (): Promise<anchor.web3.PublicKey> => {
       .signers([wallet.payer])
       .rpc();
     console.log(
-      `Created new vault id=${VAULT_ID}, accountAddress=${vaultAccountAddress}`,
+      `Created new vault id=${VAULT_ID}, accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`,
     );
   }
   return vaultAccountAddress;
@@ -122,9 +119,10 @@ const depositUsdc = async (
       tokenProgram: TOKEN_PROGRAM_ID, // FIXME: Suspect this is wrong
     })
     .rpc();
-  console.log("🚀 ~ file: client.ts:125 ~ txnHash:", txnHash);
 
-  console.log(`Deposited ${amount} USDC to vault ${vault.toString()}`);
+  console.log(
+    `Deposited ${amount} USDC to vault=${vault.toString()}, txnHash=${txnHash}`,
+  );
   return txnHash;
 };
 
@@ -185,7 +183,6 @@ const main = async () => {
   console.log("Vault USDC balance:", balance1.toNumber());
 
   const txnHash = await depositUsdc(vaultKey, 1);
-  console.log("🚀 ~ file: client.ts:187 ~ main ~ txnHash:", txnHash);
 
   const balance2 = await getVaultBalanceById(VAULT_ID);
   console.log("Vault USDC balance:", balance2.toNumber());
