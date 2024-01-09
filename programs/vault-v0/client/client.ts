@@ -1,4 +1,4 @@
-import BN from "bn.js";
+import fs from "fs";
 import * as web3 from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import {
@@ -8,7 +8,6 @@ import {
 } from "@solana/spl-token";
 import type { MurkVaultManager } from "../target/types/murk_vault_manager";
 import { Connection, Keypair } from "@solana/web3.js";
-import fs from "fs";
 
 // Configure the client to use the local cluster
 // anchor.setProvider(anchor.AnchorProvider.env());
@@ -81,7 +80,7 @@ const createVault = async (): Promise<anchor.web3.PublicKey> => {
 // by looking up the program address based on given id and then fetching it from the program
 const getVaultBalanceById = async (id: number): Promise<anchor.BN> => {
   let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("vault"), new BN(id).toArrayLike(Buffer, "le", 8)],
+    [Buffer.from("vault"), new anchor.BN(id).toArrayLike(Buffer, "le", 8)],
     program.programId,
   );
   const vaultAccount = await program.account.vault.fetch(vaultAccountAddress);
@@ -110,7 +109,7 @@ const depositUsdc = async (
   }
 
   const txnHash = await program.methods
-    .depositUsdc(new BN(amount))
+    .depositUsdc(new anchor.BN(amount))
     .accounts({
       vault: vault,
       vaultTokenAccount: vaultTokenAccount,
