@@ -3,28 +3,27 @@ import asyncio
 import logging
 import os
 import time
-import traceback
-import httpx
-import anchorpy
-import pandas as pd
-
 from datetime import datetime, timedelta
 from typing import List
-
-from rich.live import Live
-from rich.table import Table
+import traceback
 
 from solders.keypair import Keypair
+
+import anchorpy
 from solana.exceptions import SolanaRpcException
 from solana.rpc.commitment import Commitment, Confirmed
 from solana.rpc.websocket_api import connect
 from solana.rpc.types import TxOpts
+import httpx
 
 from zetamarkets_py import utils
 from zetamarkets_py.client import Client
 from zetamarkets_py.types import Asset, Network, Order, OrderArgs, OrderOptions, OrderType, Side
 from zetamarkets_py.orderbook import Orderbook
 from zetamarkets_py.serum_client.accounts.orderbook import OrderbookAccount
+
+import pandas as pd
+
 from zetamarkets_py.events import TradeEvent
 
 # Initialize logging (optional)
@@ -32,7 +31,8 @@ logging.basicConfig(level=logging.INFO)
 
 
 class MarketMaker:
-    def __init__(self, client: Client, asset: Asset, size: float, edge: float, offset: float, is_update_quotes_enabled: bool):
+    def __init__(self, client: Client, asset: Asset, size: float, edge: float, offset: float,
+                 current_open_orders: List[Order]):
         self.client = client
         self.asset = asset
         self._is_quoting = False
@@ -59,40 +59,16 @@ class MarketMaker:
         self.limit_ask_price = 0
 
         # Feature flags
-        self.is_update_quotes_enabled = False
+        self.is_update_quotes_enabled = True
 
     @classmethod
-    async def load(cls,
-                   endpoint: str,
-                   keypair: str,
-                   asset: Asset,
-                   size=0.001,
-                   edge=20,
-                   offset=0,
-                   network=Network.MAINNET,
-                   commitment=Confirmed,
-                   update_orders=True,
-    ):
-        if not keypair:
-            raise ValueError("Keypair file path is required")
-
-        # Derive wallet from keypair path in the current directory
-        with open(keypair) as kp_file:
-            kp = Keypair.from_json(kp_file.read())
-        wallet = anchorpy.Wallet(kp)
-
-        # Initialize the client
+    async def load(cls, endpoint: str, wallet: anchorpy.Wallet, asset: Asset, size=0.001, edge=20, offset=0,
+                   network=Network.MAINNET, commitment=Confirmed):
         tx_opts = TxOpts(skip_preflight=False, skip_confirmation=False, preflight_commitment=commitment)
-        client = await Client.load(
-            endpoint=endpoint,
-            commitment=commitment,
-            wallet=wallet,
-            assets=[asset],
-            tx_opts=tx_opts,
-            network=network,
-            log_level=logging.INFO)
-
-        return cls(client, asset, size, edge, offset, update_orders)
+        client = await Client.load(endpoint=endpoint, commitment=commitment, wallet=wallet, assets=[asset],
+                                   tx_opts=tx_opts, network=network, log_level=logging.INFO)
+        open_orders = await client.fetch_open_orders(asset)
+        return cls(client, asset, size, edge, offset, open_orders)
 
     async def subscribe_orderbook_midpoint_ws(self):
         """
@@ -140,7 +116,6 @@ class MarketMaker:
                 # Decode the bytes received over the websocket based on the account data layout
                 # Bids and asks have the same layout, so we can use the same decoder
                 account = OrderbookAccount.decode(msg[0].result.value.data)
-
                 # Process the account dataDetermine side based on subscription_id
                 side = None
                 incoming_subscription_id = msg[0].subscription
@@ -153,7 +128,6 @@ class MarketMaker:
                     print(f"Unknown incoming_subscription_id={incoming_subscription_id}, skipping")
                     continue
 
-                # Get level 2 orderbook, bid / ask prices and compute new fair price
                 orderbook = Orderbook(side, account, self.client.exchange.markets[self.asset]._market_state)
                 level = orderbook._get_l2(1)[0]
                 if side == Side.Bid:
@@ -168,7 +142,37 @@ class MarketMaker:
                 except Exception as e:
                     print(f"Failed to set initial quotes: {e}")
 
+    # async def subscribe_orderbook_midpoint(self):
+    #     """
+    #     Subscribe to the orderbook and update the midpoint on every update
+    #     :return:
+    #     """
+    #     bid_task = asyncio.create_task(self.monitor_orderbook(self.asset, Side.Bid))
+    #     ask_task = asyncio.create_task(self.monitor_orderbook(self.asset, Side.Ask))
+    #     await asyncio.gather(bid_task, ask_task)
+    #
+    # async def monitor_orderbook(self, asset, side):
+    #     print('Monitoring orderbook...')
+    #     async for orderbook, _ in self.client.subscribe_orderbook(asset, side):
+    #
+    #         level = orderbook._get_l2(1)[0]
+    #         if side == Side.Bid:
+    #             self.bid_price_from_ob = level.price
+    #         else:
+    #             self.ask_price_from_ob = level.price
+    #
+    #         self.fair_price = (self.bid_price_from_ob + self.ask_price_from_ob) / 2
+    #         # print(f"Highest Bid: {self.bid_price}, Lowest Ask: {self.ask_price}, Midpoint: {self.fair_price}")
+    #         try:
+    #             asyncio.create_task(self.update_quotes())
+    #         except Exception as e:
+    #             print(f"Failed to set initial quotes: {e}")
+
+    # TODO:
+    # 1) Log open positions and open orders
+    # 2) Wait for a few seconds after placing orders to update quotes
     async def update_quotes(self):
+
         """
         Update limit order quotes based on the current orderbook
         :return:
@@ -187,7 +191,7 @@ class MarketMaker:
         # Fetch current inventory
         balance, positions = await self.client.fetch_margin_state()
         open_orders = await self.client.fetch_open_orders(self.asset)
-        # summary = await self.client.get_account_risk_summary()
+        summary = await self.client.get_account_risk_summary()
 
         # Fetch current open orders
         sol_position = positions.get(self.asset, None)
@@ -234,7 +238,7 @@ class MarketMaker:
             self.bid_price = self.limit_bid_price
             self.ask_price = self.limit_ask_price
             print("Current bid and ask prices: ", self.bid_price, self.ask_price)
-            await self.trigger_order_update()
+            await self.trigger_order_update()  # Fails
 
         # Check if we have a position open
         if sol_position and abs(sol_position.size) > 0:
@@ -250,7 +254,9 @@ class MarketMaker:
                 # Calculating profit factor
                 print("Position is profitable. Adjusting limit orders based on profit factor")
                 # The profit_factor is the % difference between the fair price and the avg cost basis
-                profit_factor = (self.fair_price - avg_cost_basis) / avg_cost_basis if sol_position.size > 0 else (avg_cost_basis - self.fair_price) / avg_cost_basis  # noqa
+                profit_factor = (self.fair_price - avg_cost_basis) / avg_cost_basis if sol_position.size > 0 else (
+                                                                                                                          avg_cost_basis - self.fair_price) / avg_cost_basis  # noqa
+                # TODO: Redundant check since we know the position is profitable, move profit_factor to be what the if statement is driven off of
                 profit_factor = max(0, profit_factor)
                 print(f'Position profit factor: {round(profit_factor, 5) * 100}%')
 
@@ -298,7 +304,7 @@ class MarketMaker:
 
     async def trigger_order_update(self):
         """
-        Trigger an order update in the orderbook
+        Trigger an order update
         :return:
         """
         # Set order options
@@ -313,9 +319,8 @@ class MarketMaker:
             print("Placing new orders...")
             print('---------------------')
             print(f"Quoting {self.asset}: ${self.bid_price:.4f}@ ${self.ask_price:.4f} x {self.quote_size}")
-            start_time = datetime.now()
             await self.client.replace_orders_for_market(self.asset, [bid_order, ask_order])
-            print("Orders placed successfully. Elapsed time (ms): ", (datetime.now() - start_time).microseconds / 1000)
+            print("Orders placed successfully")
             print('---------------------')
         except SolanaRpcException as e:
             original_exception = e.__cause__
@@ -364,12 +369,11 @@ class MarketMaker:
 
     async def run(self):
         try:
-            # Tasks for the event loop to run
             tasks = [
                 asyncio.create_task(self.subscribe_orderbook_midpoint_ws()),
                 asyncio.create_task(self.write_to_csv()),
             ]
-
+            # Initialize quotes
             while True:
                 await asyncio.sleep(1)  # Check every second
                 for task in tasks:
@@ -446,38 +450,25 @@ async def main():
         help="The quote offset in bps. Defaults to %(default)s bps.",
     )
 
-    parser.add_argument(
-        "-kp",
-        "--keypair",
-        type=str,
-        default="",
-        help="The keypair file name to use for the market maker.",
-    )
-
-    parser.add_argument(
-        "-uo",
-        "--update_orders",
-        type=bool,
-        default=True,
-        help="The feature flag to enable/disable order updates. Defaults to %(default)s.",
-    )
-
     args = parser.parse_args()
 
     # If endpoint is not specified, get it from the network argument
     endpoint = args.url if args.url else utils.cluster_endpoint(args.network)
 
+    args = parser.parse_args()
+
+    endpoint = args.url if args.url else utils.cluster_endpoint(args.network)
+
+    # Load your wallet
+    KEYPAIR_PATH = "makerkey.json"
+    # KEYPAIR_PATH = "murk_protocol.json"
+    with open(KEYPAIR_PATH) as kp_file:
+        kp = Keypair.from_json(kp_file.read())
+    wallet = anchorpy.Wallet(kp)
+
     # Initialize and run the market maker
-    market_maker = await MarketMaker.load(
-        endpoint,
-        args.keypair,
-        args.asset,
-        args.size,
-        args.edge,
-        args.offset,
-        args.network,
-        args.commitment,
-        args.update_orders)
+    market_maker = await MarketMaker.load(endpoint, wallet, args.asset, args.size,
+                                          args.edge, args.offset, args.network, args.commitment)
     await market_maker.run()
 
 
