@@ -1,6 +1,37 @@
 import BN from "bn.js";
+import { PublicKey, Connection } from "@solana/web3.js";
+import { MintLayout, createMint } from "@solana/spl-token";
+import { Wallet } from "@coral-xyz/anchor";
 
-// encodeAmount encodes a number to a BN based on the decimals of the SPL
+/**
+ * Creates a new SPL token mint and sets the calling wallet as the mint authority.
+ * The function creates the mint with a specified number of decimals and returns
+ * the new mint's public key.
+ *
+ * @param connection - The Solana blockchain connection to use.
+ * @param wallet - The wallet creating the SPL token. This wallet will be set as the mint authority.
+ * @returns A Promise that resolves to the PublicKey of the newly created SPL token mint.
+ */
+export const createSPLToken = async (
+  connection: Connection,
+  wallet: Wallet
+): Promise<PublicKey> => {
+  return await createMint(
+    connection,
+    wallet.payer,
+    wallet.publicKey, // Current wallet's public key as the mint authority for now
+    null, // dont need freeze authority now
+    6 // standard decimals for now
+  );
+};
+
+/**
+ * Encodes a human-readable amount into a BigNumber (BN) considering the token's decimals.
+ *
+ * @param amount - The amount to be encoded. Can be a number or a string.
+ * @param decimals - The number of decimals the SPL token uses.
+ * @returns A BigNumber (BN) representing the amount in the smallest unit of the token.
+ */
 export const encodeAmount = (amount: number | string, decimals: number): BN => {
   let amountStr = amount.toString();
   let [integerPart, fractionalPart = ""] = amountStr.split(".");
@@ -11,12 +42,44 @@ export const encodeAmount = (amount: number | string, decimals: number): BN => {
   return new BN(fullAmountStr);
 };
 
-// decodeAmount decodes a BN to a number based on the decimals of the SPL
-export const decodeAmount = (amountBN: BN, decimals: number): string => {
+/**
+ * Decodes a BigNumber (BN) amount to a human-readable string, considering the token's decimals.
+ * This is useful for converting amounts from the smallest unit of an SPL token back to a standard format.
+ *
+ * @param amount - The BigNumber amount to be decoded, representing the token amount in its smallest unit.
+ * @param decimals - The number of decimals the SPL token uses.
+ * @returns A string representing the human-readable amount.
+ */
+export const decodeAmount = (amount: BN, decimals: number): string => {
   const divisor = new BN(10).pow(new BN(decimals));
-  const integerPart = amountBN.div(divisor);
-  const fractionalPart = amountBN.mod(divisor);
+  const integerPart = amount.div(divisor);
+  const fractionalPart = amount.mod(divisor);
   const fractionalPartStr = fractionalPart.toString(10).padStart(decimals, "0");
 
   return `${integerPart.toString()}.${fractionalPartStr}`;
+};
+
+/**
+ * Retrieves the total supply of an SPL token in a human-readable format.
+ * This function fetches the mint account information and decodes it to find the total supply,
+ * adjusting for the token's decimals.
+ *
+ * @param connection - The Solana blockchain connection.
+ * @param mintAddress - The public key of the SPL token's mint account.
+ * @returns A string representing the total supply of the token in a human-readable format.
+ */
+export const getSPLTotalSupply = async (
+  connection: Connection,
+  mintAddress: PublicKey
+): Promise<string> => {
+  const mintAccountInfo = await connection.getAccountInfo(mintAddress);
+  if (!mintAccountInfo) {
+    throw new Error("Mint account not found");
+  }
+  const tokenMintData = MintLayout.decode(mintAccountInfo.data);
+  const totalSupply = tokenMintData.supply;
+  const decimals = tokenMintData.decimals;
+  const divisor = BigInt(Math.pow(10, decimals));
+  const baseSupply = totalSupply / divisor;
+  return baseSupply.toString();
 };

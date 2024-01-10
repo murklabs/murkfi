@@ -1,7 +1,12 @@
 import BN from "bn.js";
 import * as web3 from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
-import { encodeAmount, decodeAmount } from "./utils";
+import {
+  encodeAmount,
+  decodeAmount,
+  getSPLTotalSupply,
+  createSPLToken,
+} from "./utils";
 import {
   getAssociatedTokenAddress,
   getOrCreateAssociatedTokenAccount,
@@ -9,7 +14,6 @@ import {
 } from "@solana/spl-token";
 import type { MurkVaultManager } from "../target/types/murk_vault_manager";
 import { Connection, Keypair } from "@solana/web3.js";
-import { createMint, mintTo } from "@solana/spl-token";
 import fs from "fs";
 
 // Configure the client to use the local cluster
@@ -199,15 +203,6 @@ const getOrCreateVaultUsdcAccount = async (
     throw new Error(err);
   }
 };
-const createSPLToken = async (): Promise<web3.PublicKey> => {
-  return await createMint(
-    connection,
-    wallet.payer,
-    wallet.publicKey, // Current wallet's public key as the mint authority for now
-    null,
-    6 // standard decimals for now
-  );
-};
 
 const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
   // TODO: Implement
@@ -216,8 +211,6 @@ const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
 
 const main = async () => {
   console.log("Starting client...");
-  const newSPL = await createSPLToken();
-  console.log("New SPL token created:", newSPL.toString());
   const decimals = await getNumberDecimals(USDC_MINT_ADDRESS);
   const vaultKey = await createVault("finalized");
 
