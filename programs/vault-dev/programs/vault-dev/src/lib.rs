@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer, MintTo, Mint};
+use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount, Transfer};
 
 declare_id!("9qygbwmh55Af8efyfZxs2wE4iNwhbf5ac6xtcTV1QTwB");
 
@@ -55,15 +55,18 @@ pub mod murk_vault_manager {
             amount: amount,
         });
 
+        // Mint vault tokens to user
         token::mint_to(
-            CpiContext::new(ctx.accounts.token_program.to_account_info(), MintTo {
-                mint: ctx.accounts.mint.to_account_info(),
-                to: ctx.accounts.from.to_account_info(),
-                authority: ctx.accounts.authority.to_account_info(),
-            }),
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.user_token_account.to_account_info(),
+                    authority: ctx.accounts.signer.to_account_info(),
+                },
+            ),
             amount,
-            signer,
-        )
+        )?;
 
         Ok(())
     }
