@@ -14,12 +14,13 @@ import { Wallet } from "@coral-xyz/anchor";
  */
 export const createSPLToken = async (
   connection: Connection,
-  wallet: Wallet
+  wallet: Wallet,
+  authority: PublicKey
 ): Promise<PublicKey> => {
   return await createMint(
     connection,
     wallet.payer,
-    wallet.publicKey, // Current wallet's public key as the mint authority for now
+    authority, // can be anything but should be the vault program
     null, // dont need freeze authority now
     6 // standard decimals for now
   );
