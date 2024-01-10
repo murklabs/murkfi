@@ -1,6 +1,7 @@
 import BN from "bn.js";
 import * as web3 from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
+import { encodeAmount, decodeAmount } from "./utils";
 import {
   getAssociatedTokenAddress,
   getOrCreateAssociatedTokenAccount,
@@ -8,6 +9,7 @@ import {
 } from "@solana/spl-token";
 import type { MurkVaultManager } from "../target/types/murk_vault_manager";
 import { Connection, Keypair } from "@solana/web3.js";
+import { createMint, mintTo } from "@solana/spl-token";
 import fs from "fs";
 
 // Configure the client to use the local cluster
@@ -197,27 +199,15 @@ const getOrCreateVaultUsdcAccount = async (
     throw new Error(err);
   }
 };
-
-// encodeAmount encodes a number to a BN based on the decimals of the SPL
-function encodeAmount(amount: number | string, decimals: number): BN {
-  let amountStr = amount.toString();
-  let [integerPart, fractionalPart = ""] = amountStr.split(".");
-  fractionalPart = fractionalPart.padEnd(decimals, "0");
-
-  const fullAmountStr = integerPart + fractionalPart.slice(0, decimals);
-
-  return new BN(fullAmountStr);
-}
-
-// decodeAmount decodes a BN to a number based on the decimals of the SPL
-function decodeAmount(amountBN: BN, decimals: number): string {
-  const divisor = new BN(10).pow(new BN(decimals));
-  const integerPart = amountBN.div(divisor);
-  const fractionalPart = amountBN.mod(divisor);
-  const fractionalPartStr = fractionalPart.toString(10).padStart(decimals, "0");
-
-  return `${integerPart.toString()}.${fractionalPartStr}`;
-}
+const createSPLToken = async (): Promise<web3.PublicKey> => {
+  return await createMint(
+    connection,
+    wallet.payer,
+    wallet.publicKey, // Current wallet's public key as the mint authority for now
+    null,
+    6 // standard decimals for now
+  );
+};
 
 const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
   // TODO: Implement
@@ -226,6 +216,8 @@ const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
 
 const main = async () => {
   console.log("Starting client...");
+  const newSPL = await createSPLToken();
+  console.log("New SPL token created:", newSPL.toString());
   const decimals = await getNumberDecimals(USDC_MINT_ADDRESS);
   const vaultKey = await createVault("finalized");
 
@@ -237,10 +229,6 @@ const main = async () => {
   const balance2 = await getVaultBalanceById(VAULT_ID);
   console.log("Vault USDC balance:", decodeAmount(balance2, decimals));
 
-  // await withdrawUsdc(vault, 50);
-
-  // const newBalance = await getTokenAccountBalance(provider, vault);
-  // console.log("New vault USDC balance:", newBalance.uiAmount);
   console.log("Client finished!");
 };
 
