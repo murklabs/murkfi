@@ -20,10 +20,11 @@ const keypair = Keypair.fromSecretKey(
   ),
 );
 const wallet = new anchor.Wallet(keypair);
-const opts: web3.ConfirmOptions = {
+const confirmOptions: web3.ConfirmOptions = {
+  commitment: "finalized",
   preflightCommitment: "confirmed",
 };
-const provider = new anchor.AnchorProvider(connection, wallet, opts);
+const provider = new anchor.AnchorProvider(connection, wallet, confirmOptions);
 anchor.setProvider(provider);
 
 const program = anchor.workspace
@@ -43,12 +44,14 @@ const getNumberDecimals = async (mintAddress: string): Promise<number> => {
     .decimals as number;
 };
 
-// createVault gets a vault account program address and creates the vault
-const createVault = async (): Promise<anchor.web3.PublicKey> => {
+// getOrCreateVault gets a vault account program address and creates the vault
+const getOrCreateVault = async (
+  vaultId: number,
+): Promise<anchor.web3.PublicKey> => {
   let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
     [
       Buffer.from("vault", "utf8"),
-      new anchor.BN(VAULT_ID).toArrayLike(Buffer, "le", 8),
+      new anchor.BN(vaultId).toArrayLike(Buffer, "le", 8),
     ],
     program.programId,
   );
@@ -61,7 +64,7 @@ const createVault = async (): Promise<anchor.web3.PublicKey> => {
     );
   } catch {
     const txnHash = await program.methods
-      .createVault(new anchor.BN(VAULT_ID))
+      .createVault(new anchor.BN(vaultId))
       .accounts({
         authority: program.provider.publicKey,
         vault: vaultAccountAddress,
@@ -70,21 +73,10 @@ const createVault = async (): Promise<anchor.web3.PublicKey> => {
       .signers([wallet.payer])
       .rpc();
     console.log(
-      `Created new vault id=${VAULT_ID}, accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`,
+      `Created new vault id=${vaultId}, accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`,
     );
   }
   return vaultAccountAddress;
-};
-
-// getVaultBalanceById gets a vaults balance based on it's id (read-only)
-// by looking up the program address based on given id and then fetching it from the program
-const getVaultBalanceById = async (id: number): Promise<anchor.BN> => {
-  let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("vault"), new anchor.BN(id).toArrayLike(Buffer, "le", 8)],
-    program.programId,
-  );
-  const vaultAccount = await program.account.vault.fetch(vaultAccountAddress);
-  return vaultAccount.usdcBalance;
 };
 
 // getTokenAccountBalance gets the balance of the vault's USDC associated token account
@@ -154,10 +146,6 @@ const depositUsdc = async (
     })
     .rpc(confirmOptions);
 
-  console.log(
-    `Deposited ${amount} USDC to vaultKey=${vaultKey.toString()}, txnHash=${txnHash}`,
-  );
-
   return txnHash;
 };
 
@@ -223,23 +211,22 @@ const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
 
 const main = async () => {
   console.log("Starting client...");
-  const vaultKey = await createVault();
+  const vaultKey = await getOrCreateVault(VAULT_ID);
 
-  const balance1 = await getVaultBalanceById(VAULT_ID);
-  console.log("Vault USDC balance:", balance1.toNumber());
+  const vaultUsdcAccountBalance1 = await getVaultUsdcAccountBalance(vaultKey);
+  console.log(`Vault USDC balance=${vaultUsdcAccountBalance1}`);
 
-  const txnHash = await depositUsdc(vaultKey, 1);
+  const amount = 1;
+  const txnHash = await depositUsdc(vaultKey, amount);
+  console.log(
+    `Deposited ${amount} USDC to vaultKey=${vaultKey.toString()}, txnHash=${txnHash}`,
+  );
 
-  const vaultUsdcAccountBalance = await getVaultUsdcAccountBalance(vaultKey);
-  console.log("🚀 ~ main ~ vaultUsdcAccount:", vaultUsdcAccountBalance);
-
-  const balance2 = await getVaultBalanceById(VAULT_ID);
-  console.log("Vault USDC balance:", balance2.toNumber());
+  const vaultUsdcAccountBalance2 = await getVaultUsdcAccountBalance(vaultKey);
+  console.log(`Vault USDC balance=${vaultUsdcAccountBalance2}`);
 
   // await withdrawUsdc(vault, 50);
 
-  // const newBalance = await getTokenAccountBalance(provider, vault);
-  // console.log("New vault USDC balance:", newBalance.uiAmount);
   console.log("Client finished!");
 };
 
