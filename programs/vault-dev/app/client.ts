@@ -31,7 +31,7 @@ const program = anchor.workspace
   .MurkVaultManager as anchor.Program<MurkVaultManager>;
 
 const USDC_MINT_ADDRESS = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"; // USDC token address on devnet
-const VAULT_ID = 3;
+const VAULT_ID = 1;
 
 // getNumberDecimals gets the decimal numbers for a given SPL token
 // Decimal numbers are dynamic since each SPL can define their own
