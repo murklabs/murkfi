@@ -1,6 +1,17 @@
 import BN from "bn.js";
-import * as web3 from "@solana/web3.js";
+import {
+  PublicKey,
+  ConfirmOptions,
+  Commitment,
+  SystemProgram,
+} from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
+import {
+  encodeAmount,
+  decodeAmount,
+  getSPLTotalSupply,
+  createSPLToken,
+} from "./utils";
 import {
   getAssociatedTokenAddress,
   getOrCreateAssociatedTokenAccount,
@@ -20,8 +31,9 @@ const keypair = Keypair.fromSecretKey(
     JSON.parse(fs.readFileSync("./devnet-wallet.json").toString())
   )
 );
+const SPL_NEEDED = false; // used to set flag for SPL token creation
 const wallet = new anchor.Wallet(keypair);
-const opts: web3.ConfirmOptions = {
+const opts: ConfirmOptions = {
   preflightCommitment: "confirmed",
 };
 const provider = new anchor.AnchorProvider(connection, wallet, opts);
@@ -45,7 +57,7 @@ const getNumberDecimals = async (mintAddress: string): Promise<number> => {
 
 // createVault gets a vault account program address and creates the vault
 const createVault = async (
-  commitment: web3.Commitment
+  commitment: Commitment
 ): Promise<anchor.web3.PublicKey> => {
   console.log(`Finding vault...`);
   let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -68,7 +80,7 @@ const createVault = async (
       .accounts({
         authority: program.provider.publicKey,
         vault: vaultAccountAddress,
-        systemProgram: web3.SystemProgram.programId,
+        systemProgram: SystemProgram.programId,
       })
       .signers([wallet.payer])
       .rpc({
@@ -95,12 +107,13 @@ const getVaultBalanceById = async (id: number): Promise<anchor.BN> => {
 const depositUsdc = async (
   vault: anchor.web3.PublicKey,
   amount: BN,
-  commitment: web3.Commitment
+  commitment: Commitment
 ): Promise<string | undefined> => {
   // User USDC token account
   const userTokenAccount = await getUserUsdcAccount(
     wallet.publicKey,
-    commitment
+    commitment,
+    new PublicKey(USDC_MINT_ADDRESS)
   );
   console.log(`User USDC token account=${userTokenAccount.toString()}`);
 
@@ -130,12 +143,13 @@ const depositUsdc = async (
 };
 
 const getUserUsdcAccount = async (
-  userKey: anchor.web3.PublicKey,
-  commitment: web3.Commitment
+  userKey: PublicKey,
+  commitment: Commitment,
+  spl_token_address: PublicKey
 ) => {
   try {
     const usdcAccount = await getAssociatedTokenAddress(
-      new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
+      spl_token_address,
       userKey
     );
     const userUSDCAccountInfo = await connection.getAccountInfo(usdcAccount);
@@ -146,7 +160,7 @@ const getUserUsdcAccount = async (
     const newUserUSDCAccount = await getOrCreateAssociatedTokenAccount(
       program.provider.connection,
       wallet.payer,
-      new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
+      new PublicKey(USDC_MINT_ADDRESS),
       userKey,
       true,
       commitment
@@ -160,7 +174,7 @@ const getUserUsdcAccount = async (
 
 const getOrCreateVaultUsdcAccount = async (
   vaultKey: anchor.web3.PublicKey,
-  commitment: web3.Commitment
+  commitment: Commitment
 ) => {
   try {
     const vaultUsdcAccount = await getAssociatedTokenAddress(
@@ -198,27 +212,6 @@ const getOrCreateVaultUsdcAccount = async (
   }
 };
 
-// encodeAmount encodes a number to a BN based on the decimals of the SPL
-function encodeAmount(amount: number | string, decimals: number): BN {
-  let amountStr = amount.toString();
-  let [integerPart, fractionalPart = ""] = amountStr.split(".");
-  fractionalPart = fractionalPart.padEnd(decimals, "0");
-
-  const fullAmountStr = integerPart + fractionalPart.slice(0, decimals);
-
-  return new BN(fullAmountStr);
-}
-
-// decodeAmount decodes a BN to a number based on the decimals of the SPL
-function decodeAmount(amountBN: BN, decimals: number): string {
-  const divisor = new BN(10).pow(new BN(decimals));
-  const integerPart = amountBN.div(divisor);
-  const fractionalPart = amountBN.mod(divisor);
-  const fractionalPartStr = fractionalPart.toString(10).padStart(decimals, "0");
-
-  return `${integerPart.toString()}.${fractionalPartStr}`;
-}
-
 const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
   // TODO: Implement
   console.log("Withdrawn", amount, "USDC from vault");
@@ -226,6 +219,12 @@ const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
 
 const main = async () => {
   console.log("Starting client...");
+  let vaultToken: PublicKey | undefined;
+  if (SPL_NEEDED) {
+    vaultToken = await createSPLToken(connection, wallet, program.programId);
+  } else {
+    vaultToken = new PublicKey(""); // add this in if you have one made already
+  }
   const decimals = await getNumberDecimals(USDC_MINT_ADDRESS);
   const vaultKey = await createVault("finalized");
 
@@ -237,10 +236,6 @@ const main = async () => {
   const balance2 = await getVaultBalanceById(VAULT_ID);
   console.log("Vault USDC balance:", decodeAmount(balance2, decimals));
 
-  // await withdrawUsdc(vault, 50);
-
-  // const newBalance = await getTokenAccountBalance(provider, vault);
-  // console.log("New vault USDC balance:", newBalance.uiAmount);
   console.log("Client finished!");
 };
 

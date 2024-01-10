@@ -9,6 +9,8 @@ murk_vault_manager = "4ccQd4R1Z8yrb7am6qHyB6TPAwMD2Gp4cxhz1ZShHoQR"
 url = "https://api.apr.dev"
 
 [provider]
+# cluster = "localnet"
+# wallet = "~/.config/solana/id.json"
 cluster = "devnet"
 wallet = "devnet-wallet.json"
 

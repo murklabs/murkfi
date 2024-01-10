@@ -6,7 +6,7 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "murk_vault_manager"
+name = "murk_vault_manager" # Program name 1:1
 
 [features]
 no-entrypoint = []
