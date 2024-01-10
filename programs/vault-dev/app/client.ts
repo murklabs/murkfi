@@ -31,7 +31,7 @@ const program = anchor.workspace
   .MurkVaultManager as anchor.Program<MurkVaultManager>;
 
 const USDC_MINT_ADDRESS = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"; // USDC token address on devnet
-const VAULT_ID = 1;
+const VAULT_ID = 3;
 
 // getNumberDecimals gets the decimal numbers for a given SPL token
 // Decimal numbers are dynamic since each SPL can define their own
@@ -44,7 +44,10 @@ const getNumberDecimals = async (mintAddress: string): Promise<number> => {
 };
 
 // createVault gets a vault account program address and creates the vault
-const createVault = async (): Promise<anchor.web3.PublicKey> => {
+const createVault = async (
+  commitment: web3.Commitment
+): Promise<anchor.web3.PublicKey> => {
+  console.log(`Finding vault...`);
   let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
     [
       Buffer.from("vault", "utf8"),
@@ -60,7 +63,7 @@ const createVault = async (): Promise<anchor.web3.PublicKey> => {
       `Vault already exists, id=${vaultAccount.id}, accountAddress=${vaultAccountAddress}`
     );
   } catch {
-    await program.methods
+    let tx = await program.methods
       .createVault(new anchor.BN(VAULT_ID))
       .accounts({
         authority: program.provider.publicKey,
@@ -68,7 +71,9 @@ const createVault = async (): Promise<anchor.web3.PublicKey> => {
         systemProgram: web3.SystemProgram.programId,
       })
       .signers([wallet.payer])
-      .rpc();
+      .rpc({
+        commitment,
+      });
     console.log(
       `Created new vault id=${VAULT_ID}, accountAddress=${vaultAccountAddress}`
     );
@@ -89,14 +94,21 @@ const getVaultBalanceById = async (id: number): Promise<anchor.BN> => {
 
 const depositUsdc = async (
   vault: anchor.web3.PublicKey,
-  amount: number
+  amount: number,
+  commitment: web3.Commitment
 ): Promise<string | undefined> => {
   // User USDC token account
-  const userTokenAccount = await getUserUsdcAccount(wallet.publicKey);
+  const userTokenAccount = await getUserUsdcAccount(
+    wallet.publicKey,
+    commitment
+  );
   console.log(`User USDC token account=${userTokenAccount.toString()}`);
 
   // Vault USDC token account
-  const vaultTokenAccount = await getOrCreateVaultUsdcAccount(vault);
+  const vaultTokenAccount = await getOrCreateVaultUsdcAccount(
+    vault,
+    commitment
+  );
   console.log(`Vault USDC token account=${vaultTokenAccount.toString()}`);
 
   const txnHash = await program.methods
@@ -108,14 +120,19 @@ const depositUsdc = async (
       signer: wallet.publicKey,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .rpc();
+    .rpc({
+      commitment,
+    });
   console.log("🚀 ~ file: client.ts:125 ~ txnHash:", txnHash);
 
   console.log(`Deposited ${amount} USDC to vault ${vault.toString()}`);
   return txnHash;
 };
 
-const getUserUsdcAccount = async (userKey: anchor.web3.PublicKey) => {
+const getUserUsdcAccount = async (
+  userKey: anchor.web3.PublicKey,
+  commitment: web3.Commitment
+) => {
   try {
     const usdcAccount = await getAssociatedTokenAddress(
       new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
@@ -131,7 +148,8 @@ const getUserUsdcAccount = async (userKey: anchor.web3.PublicKey) => {
       wallet.payer,
       new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
       userKey,
-      true
+      true,
+      commitment
     );
     console.log(`Created new user USDC token account | ${newUserUSDCAccount}`);
     return usdcAccount;
@@ -140,7 +158,10 @@ const getUserUsdcAccount = async (userKey: anchor.web3.PublicKey) => {
   }
 };
 
-const getOrCreateVaultUsdcAccount = async (vaultKey: anchor.web3.PublicKey) => {
+const getOrCreateVaultUsdcAccount = async (
+  vaultKey: anchor.web3.PublicKey,
+  commitment: web3.Commitment
+) => {
   try {
     const vaultUsdcAccount = await getAssociatedTokenAddress(
       new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
@@ -164,7 +185,8 @@ const getOrCreateVaultUsdcAccount = async (vaultKey: anchor.web3.PublicKey) => {
       wallet.payer,
       new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
       vaultKey,
-      true
+      true,
+      commitment
     );
 
     console.log(
@@ -183,13 +205,12 @@ const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
 
 const main = async () => {
   console.log("Starting client...");
-  const vaultKey = await createVault();
+  const vaultKey = await createVault("finalized");
 
   const balance1 = await getVaultBalanceById(VAULT_ID);
   console.log("Vault USDC balance:", balance1.toNumber());
 
-  const txnHash = await depositUsdc(vaultKey, 1);
-  console.log("🚀 ~ file: client.ts:187 ~ main ~ txnHash:", txnHash);
+  await depositUsdc(vaultKey, 1, "finalized");
 
   const balance2 = await getVaultBalanceById(VAULT_ID);
   console.log("Vault USDC balance:", balance2.toNumber());
