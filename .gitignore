@@ -1,4 +1,7 @@
 .vscode
+dump.rdb
+
+test-ledger/
 
 # Private keys
 devnet-wallet.json
