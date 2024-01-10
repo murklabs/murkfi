@@ -214,8 +214,6 @@ function decodeAmount(amountBN: BN, decimals: number): string {
   const divisor = new BN(10).pow(new BN(decimals));
   const integerPart = amountBN.div(divisor);
   const fractionalPart = amountBN.mod(divisor);
-
-  // Adding leading zeros to the fractional part
   const fractionalPartStr = fractionalPart.toString(10).padStart(decimals, "0");
 
   return `${integerPart.toString()}.${fractionalPartStr}`;
