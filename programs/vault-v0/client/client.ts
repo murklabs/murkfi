@@ -93,8 +93,12 @@ const getVaultUsdcAccountBalance = async (
 ): Promise<number | undefined> => {
   try {
     // Vault USDC token account
-    const vaultTokenAccountKey = await getOrCreateVaultUsdcAccountKey(vaultKey);
-    if (!vaultTokenAccountKey) {
+    const vaultUsdcAccountKey = await getAssociatedTokenAddress(
+      new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
+      vaultKey,
+      true,
+    );
+    if (!vaultUsdcAccountKey) {
       console.log(
         "Vault does not have a USDC token account and failed to create one. Short-circuiting.",
       );
@@ -102,7 +106,7 @@ const getVaultUsdcAccountBalance = async (
     }
 
     const tokenAmount =
-      await connection.getTokenAccountBalance(vaultTokenAccountKey);
+      await connection.getTokenAccountBalance(vaultUsdcAccountKey);
 
     if (!tokenAmount.value.uiAmount) {
       throw new Error("No balance found");
