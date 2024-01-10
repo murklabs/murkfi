@@ -94,7 +94,7 @@ const getVaultBalanceById = async (id: number): Promise<anchor.BN> => {
 
 const depositUsdc = async (
   vault: anchor.web3.PublicKey,
-  amount: number,
+  amount: BN,
   commitment: web3.Commitment
 ): Promise<string | undefined> => {
   // User USDC token account
@@ -112,7 +112,7 @@ const depositUsdc = async (
   console.log(`Vault USDC token account=${vaultTokenAccount.toString()}`);
 
   const txnHash = await program.methods
-    .depositUsdc(new BN(amount))
+    .depositUsdc(amount)
     .accounts({
       vault: vault,
       vaultTokenAccount: vaultTokenAccount,
@@ -198,6 +198,29 @@ const getOrCreateVaultUsdcAccount = async (
   }
 };
 
+// encodeAmount encodes a number to a BN based on the decimals of the SPL
+function encodeAmount(amount: number | string, decimals: number): BN {
+  let amountStr = amount.toString();
+  let [integerPart, fractionalPart = ""] = amountStr.split(".");
+  fractionalPart = fractionalPart.padEnd(decimals, "0");
+
+  const fullAmountStr = integerPart + fractionalPart.slice(0, decimals);
+
+  return new BN(fullAmountStr);
+}
+
+// decodeAmount decodes a BN to a number based on the decimals of the SPL
+function decodeAmount(amountBN: BN, decimals: number): string {
+  const divisor = new BN(10).pow(new BN(decimals));
+  const integerPart = amountBN.div(divisor);
+  const fractionalPart = amountBN.mod(divisor);
+
+  // Adding leading zeros to the fractional part
+  const fractionalPartStr = fractionalPart.toString(10).padStart(decimals, "0");
+
+  return `${integerPart.toString()}.${fractionalPartStr}`;
+}
+
 const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
   // TODO: Implement
   console.log("Withdrawn", amount, "USDC from vault");
@@ -205,15 +228,16 @@ const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
 
 const main = async () => {
   console.log("Starting client...");
+  const decimals = await getNumberDecimals(USDC_MINT_ADDRESS);
   const vaultKey = await createVault("finalized");
 
   const balance1 = await getVaultBalanceById(VAULT_ID);
-  console.log("Vault USDC balance:", balance1.toNumber());
+  console.log("Vault USDC balance:", decodeAmount(balance1, decimals));
 
-  await depositUsdc(vaultKey, 1, "finalized");
+  await depositUsdc(vaultKey, encodeAmount(0.1, decimals), "finalized");
 
   const balance2 = await getVaultBalanceById(VAULT_ID);
-  console.log("Vault USDC balance:", balance2.toNumber());
+  console.log("Vault USDC balance:", decodeAmount(balance2, decimals));
 
   // await withdrawUsdc(vault, 50);
 

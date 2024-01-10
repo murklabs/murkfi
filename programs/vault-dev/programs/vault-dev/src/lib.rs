@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("3VNZYCSkJk1UwJMQVRrS2y14oxxwKKC3hajoWsXpvHEQ");
+declare_id!("9qygbwmh55Af8efyfZxs2wE4iNwhbf5ac6xtcTV1QTwB");
 
 #[program]
 pub mod murk_vault_manager {
