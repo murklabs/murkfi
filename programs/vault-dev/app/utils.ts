@@ -1,6 +1,11 @@
 import BN from "bn.js";
-import { PublicKey, Connection } from "@solana/web3.js";
-import { MintLayout, createMint } from "@solana/spl-token";
+import { PublicKey, Connection, Commitment } from "@solana/web3.js";
+import {
+  MintLayout,
+  createMint,
+  getAssociatedTokenAddress,
+  getOrCreateAssociatedTokenAccount,
+} from "@solana/spl-token";
 import { Wallet } from "@coral-xyz/anchor";
 
 /**
@@ -83,4 +88,50 @@ export const getSPLTotalSupply = async (
   const divisor = BigInt(Math.pow(10, decimals));
   const baseSupply = totalSupply / divisor;
   return baseSupply.toString();
+};
+
+/**
+ * Creates a new ATA for a given SPL token and wallet.
+ *
+ * @param connection - The Solana blockchain connection.
+ * @param wallet - The wallet creating the ATA.
+ * @param pubKey - The public key of the wallet creating the ATA.
+ * @param tokenKey - The public key of the SPL token's mint account.
+ * @param commitment - The Solana commitment level to use.
+ * @returns A Promise that resolves to the PublicKey of the newly created ATA.
+ */
+export const getOrCreateATA = async (
+  connection: Connection,
+  wallet: Wallet,
+  pubKey: PublicKey,
+  tokenKey: PublicKey,
+  commitment: Commitment
+): Promise<PublicKey> => {
+  try {
+    const ata = await getAssociatedTokenAddress(tokenKey, pubKey, true);
+    console.log(`ATA: ${ata}`);
+    const ataInfo = await connection.getAccountInfo(ata);
+    if (ataInfo) {
+      console.log(`Attached token account exists, ATA: ${ata}`);
+      return ata; // ATA exists, return its address
+    }
+
+    console.log("ATA does not exist, creating...");
+    const newATA = await getOrCreateAssociatedTokenAccount(
+      connection,
+      wallet.payer,
+      tokenKey,
+      pubKey,
+      true,
+      commitment
+    );
+
+    console.log(
+      `Attached token account created, ATA: ${newATA.address.toString()}`
+    );
+    return newATA.address; // Return the address of the new ATA
+  } catch (err) {
+    console.error("Error in getOrCreateATA:", err);
+    throw new Error(err.message); // More specific error message
+  }
 };
