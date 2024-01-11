@@ -7,7 +7,13 @@ import {
   getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
 import type { MurkVaultManager } from "../target/types/murk_vault_manager";
-import { ConfirmOptions, Connection, Keypair } from "@solana/web3.js";
+import {
+  ConfirmOptions,
+  Connection,
+  Keypair,
+  PublicKey,
+} from "@solana/web3.js";
+import { AnchorProvider, BN, Wallet } from "@coral-xyz/anchor";
 
 // Configure the client to use the local cluster
 // anchor.setProvider(anchor.AnchorProvider.env());
@@ -19,12 +25,12 @@ const keypair = Keypair.fromSecretKey(
     JSON.parse(fs.readFileSync("./devnet-wallet.json").toString()),
   ),
 );
-const wallet = new anchor.Wallet(keypair);
+const wallet = new Wallet(keypair);
 const confirmOptions: web3.ConfirmOptions = {
   commitment: "finalized",
   preflightCommitment: "confirmed",
 };
-const provider = new anchor.AnchorProvider(connection, wallet, confirmOptions);
+const provider = new AnchorProvider(connection, wallet, confirmOptions);
 anchor.setProvider(provider);
 
 const program = anchor.workspace
@@ -32,26 +38,24 @@ const program = anchor.workspace
 
 // Devnet test token address
 const USDC_MINT_ADDRESS = "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr"; // https://solscan.io/address/3ApJ7QVfy4qMDfbGS5DfdSBDoZuyV6vtPKHLwpravXDV?cluster=devnet
-const VAULT_ID = 1;
+const VAULT_ID = 2;
 
 // getNumberDecimals gets the decimal numbers for a given SPL token
 // Decimal numbers are dynamic since each SPL can define their own
 const getNumberDecimals = async (mintAddress: string): Promise<number> => {
   const info = await program.provider.connection.getParsedAccountInfo(
-    new anchor.web3.PublicKey(mintAddress),
+    new PublicKey(mintAddress),
   );
   return (info.value?.data as anchor.web3.ParsedAccountData).parsed.info
     .decimals as number;
 };
 
 // getOrCreateVault gets a vault account program address and creates the vault
-const getOrCreateVault = async (
-  vaultId: number,
-): Promise<anchor.web3.PublicKey> => {
-  let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
+const getOrCreateVault = async (vaultId: number): Promise<PublicKey> => {
+  let [vaultAccountAddress] = PublicKey.findProgramAddressSync(
     [
       Buffer.from("vault", "utf8"),
-      new anchor.BN(vaultId).toArrayLike(Buffer, "le", 8),
+      new BN(vaultId).toArrayLike(Buffer, "le", 8),
     ],
     program.programId,
   );
@@ -64,7 +68,7 @@ const getOrCreateVault = async (
     );
   } catch {
     const txnHash = await program.methods
-      .createVault(new anchor.BN(vaultId))
+      .createVault(new BN(vaultId))
       .accounts({
         authority: program.provider.publicKey,
         vault: vaultAccountAddress,
@@ -79,39 +83,37 @@ const getOrCreateVault = async (
   return vaultAccountAddress;
 };
 
-// getTokenAccountBalance gets the balance of the vault's USDC associated token account
-const getVaultUsdcAccountBalance = async (
-  vaultKey: anchor.web3.PublicKey,
+// getUsdcAccountBalance gets the balance of the account key USDC associated token account
+const getUsdcAccountBalance = async (
+  accountKey: PublicKey,
 ): Promise<number | undefined> => {
   try {
     // Vault USDC token account
-    const vaultUsdcAccountKey = await getAssociatedTokenAddress(
-      new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
-      vaultKey,
+    const ataKey = await getAssociatedTokenAddress(
+      new PublicKey(USDC_MINT_ADDRESS),
+      accountKey,
       true,
     );
-    if (!vaultUsdcAccountKey) {
+    if (!ataKey) {
       console.log(
-        "Vault does not have a USDC token account and failed to create one. Short-circuiting.",
+        `Account key=${accountKey} not have a USDC associated token account. Short-circuiting.`,
       );
       return;
     }
 
-    const tokenAmount =
-      await connection.getTokenAccountBalance(vaultUsdcAccountKey);
-
+    const tokenAmount = await connection.getTokenAccountBalance(ataKey);
     if (!tokenAmount.value.uiAmount) {
       throw new Error("No balance found");
     }
 
     return tokenAmount.value.uiAmount;
   } catch (err) {
-    console.log("Error getting vault USDC account, error=", err);
+    console.log("Error getting USDC ATA account, error=", err);
   }
 };
 
 const depositUsdc = async (
-  vaultKey: anchor.web3.PublicKey,
+  vaultKey: PublicKey,
   amount: number,
 ): Promise<string | undefined> => {
   // User USDC token account
@@ -136,7 +138,7 @@ const depositUsdc = async (
     maxRetries: 3,
   };
   const txnHash = await program.methods
-    .depositUsdc(new anchor.BN(amount))
+    .depositUsdc(new BN(amount))
     .accounts({
       vault: vaultKey,
       vaultTokenAccount: vaultTokenAccountKey,
@@ -149,10 +151,10 @@ const depositUsdc = async (
   return txnHash;
 };
 
-const getUserUsdcAccountKey = async (userKey: anchor.web3.PublicKey) => {
+const getUserUsdcAccountKey = async (userKey: PublicKey) => {
   try {
     const usdcAccount = await getAssociatedTokenAddress(
-      new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
+      new PublicKey(USDC_MINT_ADDRESS),
       userKey,
     );
     return usdcAccount;
@@ -162,11 +164,11 @@ const getUserUsdcAccountKey = async (userKey: anchor.web3.PublicKey) => {
 };
 
 const getOrCreateVaultUsdcAccountKey = async (
-  vaultKey: anchor.web3.PublicKey,
-): Promise<anchor.web3.PublicKey | undefined> => {
+  vaultKey: PublicKey,
+): Promise<PublicKey | undefined> => {
   try {
     const vaultUsdcAccountKey = await getAssociatedTokenAddress(
-      new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
+      new PublicKey(USDC_MINT_ADDRESS),
       vaultKey,
       true,
     );
@@ -188,7 +190,7 @@ const getOrCreateVaultUsdcAccountKey = async (
     const newVaultUsdcAccount = await getOrCreateAssociatedTokenAccount(
       program.provider.connection,
       wallet.payer,
-      new anchor.web3.PublicKey(USDC_MINT_ADDRESS),
+      new PublicKey(USDC_MINT_ADDRESS),
       vaultKey,
       true,
       undefined,
@@ -204,30 +206,82 @@ const getOrCreateVaultUsdcAccountKey = async (
   }
 };
 
-const withdrawUsdc = async (vault: anchor.web3.PublicKey, amount: number) => {
-  // TODO: Implement
-  console.log("Withdrawn", amount, "USDC from vault");
+const withdrawUsdc = async (vaultKey: PublicKey, amount: number) => {
+  // User USDC token account
+  const userTokenAccountKey = await getUserUsdcAccountKey(wallet.publicKey);
+  if (!userTokenAccountKey) {
+    console.log("User does not have a USDC token account. Short-circuiting.");
+    return;
+  }
+
+  // Vault USDC token account
+  const vaultTokenAccountKey = await getOrCreateVaultUsdcAccountKey(vaultKey);
+  if (!vaultTokenAccountKey) {
+    console.log(
+      "Vault does not have a USDC token account and failed to create one. Short-circuiting.",
+    );
+    return;
+  }
+
+  const confirmOptions: ConfirmOptions = {
+    commitment: "finalized",
+    maxRetries: 3,
+  };
+  const txnHash = await program.methods
+    .withdrawUsdc(new BN(amount))
+    .accounts({
+      vault: vaultKey,
+      vaultTokenAccount: vaultTokenAccountKey,
+      withdrawalTokenAccount: userTokenAccountKey,
+      signer: wallet.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .rpc(confirmOptions);
+
+  return txnHash;
 };
 
 const main = async () => {
-  console.log("Starting client...");
-  const vaultKey = await getOrCreateVault(VAULT_ID);
+  try {
+    console.log("Starting client...");
+    const vaultKey = await getOrCreateVault(VAULT_ID);
 
-  const vaultUsdcAccountBalance1 = await getVaultUsdcAccountBalance(vaultKey);
-  console.log(`Vault USDC balance=${vaultUsdcAccountBalance1}`);
+    const userUsdcAccountBalance1 = await getUsdcAccountBalance(
+      wallet.publicKey,
+    );
+    console.log(`User USDC balance=${userUsdcAccountBalance1}`);
+    const vaultUsdcAccountBalance1 = await getUsdcAccountBalance(vaultKey);
+    console.log(`Vault USDC balance=${vaultUsdcAccountBalance1}`);
 
-  const amount = 1;
-  const txnHash = await depositUsdc(vaultKey, amount);
-  console.log(
-    `Deposited ${amount} USDC to vaultKey=${vaultKey.toString()}, txnHash=${txnHash}`,
-  );
+    const amount = 1;
+    const depTxnHash = await depositUsdc(vaultKey, amount);
+    console.log(
+      `Deposit of ${amount} USDC to vaultKey=${vaultKey.toString()} complete, txnHash=${depTxnHash}`,
+    );
 
-  const vaultUsdcAccountBalance2 = await getVaultUsdcAccountBalance(vaultKey);
-  console.log(`Vault USDC balance=${vaultUsdcAccountBalance2}`);
+    const userUsdcAccountBalance2 = await getUsdcAccountBalance(
+      wallet.publicKey,
+    );
+    console.log(`User USDC balance=${userUsdcAccountBalance2}`);
+    const vaultUsdcAccountBalance2 = await getUsdcAccountBalance(vaultKey);
+    console.log(`Vault USDC balance=${vaultUsdcAccountBalance2}`);
 
-  // await withdrawUsdc(vault, 50);
+    const withTxnHash = await withdrawUsdc(vaultKey, amount);
+    console.log(
+      `Withdrawal of ${amount} USDC to vaultKey=${vaultKey.toString()} complete, txnHash=${withTxnHash}`,
+    );
 
-  console.log("Client finished!");
+    const userUsdcAccountBalance3 = await getUsdcAccountBalance(
+      wallet.publicKey,
+    );
+    console.log(`User USDC balance=${userUsdcAccountBalance3}`);
+    const vaultUsdcAccountBalance3 = await getUsdcAccountBalance(vaultKey);
+    console.log(`Vault USDC balance=${vaultUsdcAccountBalance3}`);
+
+    console.log("Client finished!");
+  } catch (err) {
+    console.log("Error running client, error=", err);
+  }
 };
 
 main();
