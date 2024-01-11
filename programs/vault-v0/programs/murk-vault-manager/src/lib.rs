@@ -25,13 +25,6 @@ pub mod murk_vault_manager {
     }
 
     pub fn deposit_usdc(ctx: Context<DepositUsdc>, amount: u64) -> Result<()> {
-        let user_token_account = &ctx.accounts.user_token_account;
-        let signer_key = ctx.accounts.signer.key();
-
-        require!(
-            user_token_account.owner == signer_key,
-            MurkError::InvalidTokenAccountOwnerError
-        );
         require!(
             !ctx.accounts.vault.is_frozen,
             MurkError::VaultFrozenError
@@ -39,6 +32,13 @@ pub mod murk_vault_manager {
         require!(
             !ctx.accounts.vault.is_closed,
             MurkError::VaultClosedError
+        );
+
+        let user_token_account = &ctx.accounts.user_token_account;
+        let signer_key = ctx.accounts.signer.key();
+        require!(
+            user_token_account.owner == signer_key,
+            MurkError::InvalidTokenAccountOwnerError
         );
 
         msg!("Depositing {} USDC into vault from {}", amount, signer_key);
@@ -53,7 +53,6 @@ pub mod murk_vault_manager {
         let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
         token::transfer(cpi_ctx, amount)?;
 
-        // Emit event for vault deposit
         emit!(VaultDeposit {
             depositor: signer_key,
             amount: amount,
@@ -62,8 +61,43 @@ pub mod murk_vault_manager {
         Ok(())
     }
 
-    pub fn withdraw_usdc(_ctx: Context<WithdrawUsdc>, _amount: u64) -> Result<()> {
-        // TODO: Implement withdraw logic
+    pub fn withdraw_usdc(ctx: Context<WithdrawUsdc>, amount: u64) -> Result<()> {
+        require!(
+            !ctx.accounts.vault.is_frozen,
+            MurkError::VaultFrozenError
+        );
+        require!(
+            !ctx.accounts.vault.is_closed,
+            MurkError::VaultClosedError
+        );
+
+        let withdrawal_token_account = &ctx.accounts.withdrawal_token_account;
+        let signer_key = ctx.accounts.signer.key();
+        require!(
+            withdrawal_token_account.owner == signer_key,
+            MurkError::InvalidTokenAccountOwnerError
+        );
+
+        // 1. TODO: Determine withdrawal amount from vault usdc ATA
+
+        // 2. Transfer USDC from vault usdc ATA to user usdc ATA
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.vault_token_account.to_account_info(),
+            to: ctx.accounts.withdrawal_token_account.to_account_info(),
+            authority: ctx.accounts.vault.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        token::transfer(cpi_ctx, amount)?;
+
+        // 3. TODO: Burn vToken from user vToken ATA
+
+        emit!(VaultWithdrawal {
+            vault_id: ctx.accounts.vault.id,
+            withdrawer: signer_key,
+            amount: amount,
+        });
+
         Ok(())
     }
 
@@ -154,25 +188,36 @@ pub struct CreateVault<'info> {
 
 #[derive(Accounts)]
 pub struct DepositUsdc<'info> {
-    #[account(mut)]
-    pub vault: Account<'info, Vault>,
-    #[account(mut)]
-    pub vault_token_account: Account<'info, TokenAccount>,
-
+    pub signer: Signer<'info>,
     #[account(
         constraint = user_token_account.owner == signer.key(),
     )]
     #[account(mut)]
     pub user_token_account: Account<'info, TokenAccount>,
-    pub signer: Signer<'info>,
+
+    #[account(mut)]
+    pub vault: Account<'info, Vault>,
+    #[account(mut)]
+    pub vault_token_account: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
 pub struct WithdrawUsdc<'info> {
+    pub signer: Signer<'info>,
+    #[account(
+        constraint = withdrawal_token_account.owner == signer.key(),
+    )]
+    #[account(mut)]
+    pub withdrawal_token_account: Account<'info, TokenAccount>,
+
     #[account(mut)]
     pub vault: Account<'info, Vault>,
+    #[account(mut)]
+    pub vault_token_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
@@ -228,6 +273,13 @@ pub struct VaultCreated {
 pub struct VaultDeposit {
     // pub vault_id: u64, TODO: Add vault_id so we know which vault was deposited to
     pub depositor: Pubkey,
+    pub amount: u64,
+}
+
+#[event]
+pub struct VaultWithdrawal {
+    pub vault_id: u64,
+    pub withdrawer: Pubkey,
     pub amount: u64,
 }
 
