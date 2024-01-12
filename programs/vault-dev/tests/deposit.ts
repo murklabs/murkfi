@@ -2,7 +2,8 @@ import assert from "assert";
 import * as anchor from "@coral-xyz/anchor";
 import { MurkVaultManager } from "../target/types/murk_vault_manager";
 import { createSPLToken, getOrCreateATA } from "../app/utils";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, mintTo } from "@solana/spl-token";
+import { PublicKey } from "@solana/web3.js";
 
 describe("deposit", () => {
   const vaultId = 1;
@@ -34,6 +35,15 @@ describe("deposit", () => {
       wallet.publicKey,
       usdcMintAddress,
       "confirmed"
+    );
+    let amount = BigInt(depositAmount);
+    await mintTo(
+      provider.connection,
+      wallet.payer,
+      usdcMintAddress,
+      user_USDC_ATA,
+      wallet.publicKey,
+      amount
     );
 
     // create vault
@@ -69,10 +79,14 @@ describe("deposit", () => {
       usdcMintAddress
     );
 
+    const [mintAuthorityPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("mint_authority")],
+      program.programId
+    );
     const vaultTokenMintAddress = await createSPLToken(
       provider.connection,
       wallet,
-      program.programId
+      mintAuthorityPDA
     );
 
     const user_VaultToken_ATA = await getOrCreateATA(
@@ -82,19 +96,25 @@ describe("deposit", () => {
       vaultTokenMintAddress
     );
 
-    console.log("Depositing USDC into vault...");
-    await program.methods
-      .depositUsdc(new anchor.BN(depositAmount))
-      .accounts({
-        vault: vaultAccountAddress,
-        vaultTokenAccount: vault_USDC_ATA,
-        userTokenAccount: user_USDC_ATA,
-        signer: provider.wallet.publicKey,
-        mint: vaultTokenMintAddress,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([wallet.payer])
-      .rpc();
+    try {
+      console.log("Depositing USDC into vault...");
+      await program.methods
+        .depositUsdc(new anchor.BN(depositAmount))
+        .accounts({
+          vault: vaultAccountAddress,
+          vaultTokenAccount: vault_USDC_ATA,
+          userTokenAccount: user_USDC_ATA,
+          signer: provider.wallet.publicKey,
+          mint: vaultTokenMintAddress,
+          userVaultTokenAccount: user_VaultToken_ATA,
+          mintAuthority: mintAuthorityPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([wallet.payer])
+        .rpc();
+    } catch (e) {
+      throw new Error(e);
+    }
     assert.ok(true);
   });
 });

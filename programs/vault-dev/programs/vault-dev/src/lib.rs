@@ -25,26 +25,20 @@ pub mod murk_vault_manager {
     }
 
     pub fn deposit_usdc(ctx: Context<DepositUsdc>, amount: u64) -> Result<()> {
-        let user_token_account = &ctx.accounts.user_token_account;
         let signer_key = ctx.accounts.signer.key();
-
-        require!(
-            user_token_account.owner == signer_key,
-            MurkError::InvalidTokenAccountOwnerError
-        );
-        require!(!ctx.accounts.vault.is_frozen, MurkError::VaultFrozenError);
-        require!(!ctx.accounts.vault.is_closed, MurkError::VaultClosedError);
 
         msg!("Depositing {} USDC into vault from {}", amount, signer_key);
 
-        // Create cpi account transfer instruction
+        // Validate deposit requirements
+        validate_deposit(&ctx, &signer_key)?;
+
+        // Transfer USDC to the vault
         let cpi_accounts = Transfer {
             from: ctx.accounts.user_token_account.to_account_info(),
             to: ctx.accounts.vault_token_account.to_account_info(),
             authority: ctx.accounts.signer.to_account_info(),
         };
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
         token::transfer(cpi_ctx, amount)?;
 
         // Emit event for vault deposit
@@ -53,17 +47,9 @@ pub mod murk_vault_manager {
             amount: amount,
         });
 
-        token::mint_to(
-            CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                MintTo {
-                    mint: ctx.accounts.mint.to_account_info(),
-                    to: ctx.accounts.user_token_account.to_account_info(),
-                    authority: ctx.accounts.signer.to_account_info(),
-                },
-            ),
-            amount,
-        )?;
+        // Mint tokens to the user's vault token account
+        let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], ctx.program_id);
+        mint_tokens_to_user(&ctx, amount, bump)?;
 
         Ok(())
     }
@@ -122,6 +108,38 @@ pub mod murk_vault_manager {
     }
 }
 
+fn mint_tokens_to_user(ctx: &Context<DepositUsdc>, amount: u64, bump: u8) -> Result<()> {
+    let seeds = &[b"mint_authority", &[bump][..]];
+    let signer = &[&seeds[..]];
+    token::mint_to(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            MintTo {
+                mint: ctx.accounts.mint.to_account_info(),
+                to: ctx.accounts.user_vault_token_account.to_account_info(),
+                authority: ctx.accounts.mint_authority.to_account_info(),
+            },
+            signer,
+        ),
+        amount,
+    )?;
+
+    Ok(())
+}
+
+fn validate_deposit(ctx: &Context<DepositUsdc>, signer_key: &Pubkey) -> Result<()> {
+    let user_token_account = &ctx.accounts.user_token_account;
+
+    require!(
+        user_token_account.owner == *signer_key,
+        MurkError::InvalidTokenAccountOwnerError
+    );
+    require!(!ctx.accounts.vault.is_frozen, MurkError::VaultFrozenError);
+    require!(!ctx.accounts.vault.is_closed, MurkError::VaultClosedError);
+
+    Ok(())
+}
+
 /**
 * Program Derived Accounts
 */
@@ -157,6 +175,15 @@ pub struct DepositUsdc<'info> {
     )]
     #[account(mut)]
     pub user_token_account: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub user_vault_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK: The `mint_authority` is a PDA derived with known seeds and is used
+    /// as the mint authority for the token. We ensure it matches the derived address
+    /// and is the correct authority for minting tokens.
+    #[account(seeds = [b"mint_authority"], bump)]
+    pub mint_authority: AccountInfo<'info>,
     pub signer: Signer<'info>,
 
     pub token_program: Program<'info, Token>,
@@ -254,4 +281,6 @@ pub enum MurkError {
     VaultUnfrozenError,
     #[msg("Vault is closed. Action cannot be performed")]
     VaultClosedError,
+    #[msg("Invalid mint authority")]
+    InvalidMintAuthority,
 }
