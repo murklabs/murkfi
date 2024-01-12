@@ -1,0 +1,100 @@
+import assert from "assert";
+import * as anchor from "@coral-xyz/anchor";
+import { MurkVaultManager } from "../target/types/murk_vault_manager";
+import { createSPLToken, getOrCreateATA } from "../app/utils";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+
+describe("deposit", () => {
+  const vaultId = 1;
+  const depositAmount = 1000;
+  const provider = anchor.AnchorProvider.env();
+  anchor.setProvider(provider);
+  const wallet = anchor.Wallet.local();
+  const nonCreatorWallet = anchor.web3.Keypair.generate();
+  const program = anchor.workspace
+    .MurkVaultManager as anchor.Program<MurkVaultManager>;
+  let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("vault", "utf8"),
+      new anchor.BN(vaultId).toArrayLike(Buffer, "le", 8),
+    ],
+    program.programId
+  );
+
+  it("deposits USDC into vault", async () => {
+    const usdcMintAddress = await createSPLToken(
+      provider.connection,
+      wallet,
+      wallet.publicKey
+    );
+
+    const user_USDC_ATA = await getOrCreateATA(
+      provider.connection,
+      wallet,
+      wallet.publicKey,
+      usdcMintAddress,
+      "confirmed"
+    );
+
+    // create vault
+    try {
+      const vaultAccount = await program.account.vault.fetch(
+        vaultAccountAddress
+      );
+      console.log(
+        `Vault already exists, id=${vaultAccount.id}, accountAddress=${vaultAccountAddress}`
+      );
+    } catch {
+      try {
+        const txnHash = await program.methods
+          .createVault(new anchor.BN(vaultId))
+          .accounts({
+            authority: program.provider.publicKey,
+            vault: vaultAccountAddress,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([wallet.payer])
+          .rpc();
+        console.log(
+          `Created new vault id=${vaultId}, accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`
+        );
+      } catch (e) {
+        console.log(e);
+      }
+    }
+    const vault_USDC_ATA = await getOrCreateATA(
+      provider.connection,
+      wallet,
+      vaultAccountAddress,
+      usdcMintAddress
+    );
+
+    const vaultTokenMintAddress = await createSPLToken(
+      provider.connection,
+      wallet,
+      program.programId
+    );
+
+    const user_VaultToken_ATA = await getOrCreateATA(
+      provider.connection,
+      wallet,
+      wallet.publicKey,
+      vaultTokenMintAddress
+    );
+
+    console.log("Depositing USDC into vault...");
+    await program.methods
+      .depositUsdc(new anchor.BN(depositAmount))
+      .accounts({
+        vault: vaultAccountAddress,
+        vaultTokenAccount: vault_USDC_ATA,
+        userTokenAccount: user_USDC_ATA,
+        signer: provider.wallet.publicKey,
+        mint: vaultTokenMintAddress,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([wallet.payer])
+      .rpc();
+    assert.ok(true);
+  });
+});

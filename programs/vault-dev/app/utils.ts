@@ -1,5 +1,11 @@
 import BN from "bn.js";
-import { PublicKey, Connection, Commitment } from "@solana/web3.js";
+import {
+  PublicKey,
+  Connection,
+  Commitment,
+  ConfirmOptions,
+  Keypair,
+} from "@solana/web3.js";
 import {
   MintLayout,
   createMint,
@@ -15,6 +21,7 @@ import { Wallet } from "@coral-xyz/anchor";
  *
  * @param connection - The Solana blockchain connection to use.
  * @param wallet - The wallet creating the SPL token. This wallet will be set as the mint authority.
+ * @param authority - This pubKey will be set as the mint authority.
  * @returns A Promise that resolves to the PublicKey of the newly created SPL token mint.
  */
 export const createSPLToken = async (
@@ -22,6 +29,9 @@ export const createSPLToken = async (
   wallet: Wallet,
   authority: PublicKey
 ): Promise<PublicKey> => {
+  const confirmOptions: ConfirmOptions = {
+    commitment: "finalized",
+  };
   return await createMint(
     connection,
     wallet.payer,
@@ -105,7 +115,7 @@ export const getOrCreateATA = async (
   wallet: Wallet,
   pubKey: PublicKey,
   tokenKey: PublicKey,
-  commitment: Commitment
+  commitment?: Commitment
 ): Promise<PublicKey> => {
   try {
     const ata = await getAssociatedTokenAddress(tokenKey, pubKey, true);
@@ -122,8 +132,7 @@ export const getOrCreateATA = async (
       wallet.payer,
       tokenKey,
       pubKey,
-      true,
-      commitment
+      true
     );
 
     console.log(
