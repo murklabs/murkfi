@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount, Transfer};
+use core::mem::size_of;
 
 declare_id!("9qygbwmh55Af8efyfZxs2wE4iNwhbf5ac6xtcTV1QTwB");
 
@@ -7,7 +8,19 @@ declare_id!("9qygbwmh55Af8efyfZxs2wE4iNwhbf5ac6xtcTV1QTwB");
 pub mod murk_vault_manager {
     use super::*;
 
-    pub fn create_vault(ctx: Context<CreateVault>, id: u64) -> Result<()> {
+    pub fn create_vault(ctx: Context<CreateVault>) -> Result<()> {
+        // let global_state = &mut ctx.accounts.global_state;
+        // let id = update_global_state(global_state)?;
+
+        // let id_bytes = id.to_le_bytes();
+        // let seeds: &[&[u8]] = &[b"vault", &id_bytes];
+        // let (vault_pda, vault_bump) = Pubkey::find_program_address(seeds, ctx.program_id);
+        // require!(
+        //     vault_pda == ctx.accounts.vault.key(),
+        //     MurkError::MismatchedPDA
+        // );
+        let id: u64 = 1;
+
         // Setup vault
         let vault = &mut ctx.accounts.vault;
         vault.creator = *ctx.accounts.authority.key;
@@ -106,8 +119,18 @@ pub mod murk_vault_manager {
 
         Ok(())
     }
+
+    // Run after program deployment to initialize global state
+    pub fn initialize_global_state(ctx: Context<InitializeGlobalState>) -> Result<()> {
+        let global_state = &mut ctx.accounts.global_state;
+        require!(!global_state.is_initialized, MurkError::AlreadyInitialized);
+        global_state.last_vault_id = 0;
+        global_state.is_initialized = true;
+        Ok(())
+    }
 }
 
+// Internal Functions
 fn mint_tokens_to_user(ctx: &Context<DepositUsdc>, amount: u64, bump: u8) -> Result<()> {
     let seeds = &[b"mint_authority", &[bump][..]];
     let signer = &[&seeds[..]];
@@ -140,6 +163,12 @@ fn validate_deposit(ctx: &Context<DepositUsdc>, signer_key: &Pubkey) -> Result<(
     Ok(())
 }
 
+fn update_global_state(global_state: &mut Account<GlobalState>) -> Result<u64> {
+    global_state.last_vault_id += 1;
+    let new_vault_id = global_state.last_vault_id;
+    Ok(new_vault_id)
+}
+
 /**
 * Program Derived Accounts
 */
@@ -149,15 +178,10 @@ pub struct CreateVault<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    #[account(
-        init,
-        seeds = [b"vault", id.to_le_bytes().as_ref()],
-        bump,
-        payer = authority,
-        space = 8 + Vault::MAX_SIZE,
-    )]
+    #[account(init, payer = authority, space = 8 + Vault::MAX_SIZE)]
     pub vault: Account<'info, Vault>,
-
+    // #[account(mut)]
+    // pub global_state: Account<'info, GlobalState>,
     pub system_program: Program<'info, System>,
 }
 
@@ -216,6 +240,21 @@ pub struct CloseVault<'info> {
     pub vault: Account<'info, Vault>,
 }
 
+#[derive(Accounts)]
+pub struct InitializeGlobalState<'info> {
+    #[account(
+        init,
+        payer = authority,
+        seeds = [b"global_state"],
+        bump,
+        space = 8 + size_of::<GlobalState>()
+    )]
+    pub global_state: Account<'info, GlobalState>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
 /**
 * Accounts
 */
@@ -226,12 +265,20 @@ pub struct Vault {
     pub id: u64,
     pub is_frozen: bool,
     pub is_closed: bool,
+    pub asset: Pubkey,
+    pub asset_name: String,
 }
 
 impl Vault {
     // Size requirement of Vault struct
     // See space reference: https://book.anchor-lang.com/anchor_references/space.html
-    pub const MAX_SIZE: usize = 32 + 8 + 1 + 1;
+    pub const MAX_SIZE: usize = 32 + 8 + 1 + 1 + 32 + 32;
+}
+
+#[account]
+pub struct GlobalState {
+    pub last_vault_id: u64,
+    pub is_initialized: bool,
 }
 
 /**
@@ -283,4 +330,8 @@ pub enum MurkError {
     VaultClosedError,
     #[msg("Invalid mint authority")]
     InvalidMintAuthority,
+    #[msg("Mismatched PDA")]
+    MismatchedPDA,
+    #[msg("Program state already initialized")]
+    AlreadyInitialized,
 }

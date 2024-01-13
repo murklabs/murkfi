@@ -46,6 +46,27 @@ describe("deposit", () => {
       amount
     );
 
+    // init global state
+    let [globalStateAddress] = PublicKey.findProgramAddressSync(
+      [Buffer.from("global_state")],
+      program.programId
+    );
+    try {
+      const tx = await program.methods
+        .initializeGlobalState()
+        .accounts({
+          globalState: globalStateAddress,
+          authority: wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([wallet.payer])
+        .rpc();
+    } catch (e) {
+      console.log(e);
+      throw new Error(e);
+    }
+    console.log("Initialized global state");
+
     // create vault
     try {
       const vaultAccount = await program.account.vault.fetch(
@@ -56,10 +77,12 @@ describe("deposit", () => {
       );
     } catch {
       try {
+        console.log("Creating new vault...");
         const txnHash = await program.methods
-          .createVault(new anchor.BN(vaultId))
+          .createVault()
           .accounts({
             authority: program.provider.publicKey,
+            // globalState: globalStateAddress,
             vault: vaultAccountAddress,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
@@ -69,7 +92,7 @@ describe("deposit", () => {
           `Created new vault id=${vaultId}, accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`
         );
       } catch (e) {
-        console.log(e);
+        throw new Error(e);
       }
     }
     const vault_USDC_ATA = await getOrCreateATA(
