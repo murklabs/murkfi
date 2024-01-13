@@ -15,10 +15,7 @@ describe("deposit", () => {
   const program = anchor.workspace
     .MurkVaultManager as anchor.Program<MurkVaultManager>;
   let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("vault", "utf8"),
-      new anchor.BN(vaultId).toArrayLike(Buffer, "le", 8),
-    ],
+    [Buffer.from("vault"), new anchor.BN(vaultId).toArrayLike(Buffer, "le", 8)],
     program.programId
   );
 
@@ -52,7 +49,7 @@ describe("deposit", () => {
       program.programId
     );
     try {
-      const tx = await program.methods
+      await program.methods
         .initializeGlobalState()
         .accounts({
           globalState: globalStateAddress,
@@ -62,7 +59,6 @@ describe("deposit", () => {
         .signers([wallet.payer])
         .rpc();
     } catch (e) {
-      console.log(e);
       throw new Error(e);
     }
     console.log("Initialized global state");
@@ -81,8 +77,8 @@ describe("deposit", () => {
         const txnHash = await program.methods
           .createVault()
           .accounts({
-            authority: program.provider.publicKey,
-            // globalState: globalStateAddress,
+            authority: wallet.publicKey,
+            globalState: globalStateAddress,
             vault: vaultAccountAddress,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
