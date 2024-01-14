@@ -1228,7 +1228,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "murk_vault_manager"
+name = "murkfi"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",

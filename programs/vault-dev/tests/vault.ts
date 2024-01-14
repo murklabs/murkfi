@@ -1,6 +1,6 @@
 import assert from "assert";
 import * as anchor from "@coral-xyz/anchor";
-import { MurkVaultManager } from "../target/types/murk_vault_manager";
+import { Murkfi } from "../target/types/murkfi";
 import { createSPLToken, getOrCreateATA } from "../app/utils";
 import {
   TOKEN_PROGRAM_ID,
@@ -14,8 +14,7 @@ describe("murk-vault-manager", () => {
   anchor.setProvider(provider);
   const wallet = anchor.Wallet.local();
   const nonCreatorWallet = anchor.web3.Keypair.generate();
-  const program = anchor.workspace
-    .MurkVaultManager as anchor.Program<MurkVaultManager>;
+  const program = anchor.workspace.Murkfi as anchor.Program<Murkfi>;
 
   let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
     [
@@ -36,7 +35,7 @@ describe("murk-vault-manager", () => {
       );
     } catch {
       const txnHash = await program.methods
-        .createVault(new anchor.BN(vaultId))
+        .createVault()
         .accounts({
           authority: program.provider.publicKey,
           vault: vaultAccountAddress,
@@ -205,8 +204,7 @@ describe("deposit", () => {
   anchor.setProvider(provider);
   const wallet = anchor.Wallet.local();
   const nonCreatorWallet = anchor.web3.Keypair.generate();
-  const program = anchor.workspace
-    .MurkVaultManager as anchor.Program<MurkVaultManager>;
+  const program = anchor.workspace.Murkfi as anchor.Program<Murkfi>;
   let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
     [
       Buffer.from("vault", "utf8"),
@@ -240,7 +238,7 @@ describe("deposit", () => {
       );
     } catch {
       const txnHash = await program.methods
-        .createVault(new anchor.BN(vaultId))
+        .createVault()
         .accounts({
           authority: program.provider.publicKey,
           vault: vaultAccountAddress,

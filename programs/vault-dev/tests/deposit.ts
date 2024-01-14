@@ -1,6 +1,6 @@
 import assert from "assert";
 import * as anchor from "@coral-xyz/anchor";
-import { MurkVaultManager } from "../target/types/murk_vault_manager";
+import { Murkfi } from "../target/types/murkfi";
 import { createSPLToken, getOrCreateATA } from "../app/utils";
 import { TOKEN_PROGRAM_ID, mintTo } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
@@ -12,8 +12,7 @@ describe("deposit", () => {
   anchor.setProvider(provider);
   const wallet = anchor.Wallet.local();
   const nonCreatorWallet = anchor.web3.Keypair.generate();
-  const program = anchor.workspace
-    .MurkVaultManager as anchor.Program<MurkVaultManager>;
+  const program = anchor.workspace.Murkfi as anchor.Program<Murkfi>;
   let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), new anchor.BN(vaultId).toArrayLike(Buffer, "le", 8)],
     program.programId
@@ -49,7 +48,7 @@ describe("deposit", () => {
     );
     try {
       await program.methods
-        .initializeGlobalState()
+        .initializeState()
         .accounts({
           globalState: globalStateAddress,
           authority: wallet.publicKey,
