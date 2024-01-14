@@ -19,9 +19,8 @@ pub mod murkfi {
         handle_deposit(ctx, amount)
     }
 
-    pub fn withdraw_usdc(_ctx: Context<WithdrawUsdc>, _amount: u64) -> Result<()> {
-        // TODO: Implement withdraw logic
-        Ok(())
+    pub fn withdraw_usdc(ctx: Context<WithdrawUsdc>, amount: u64) -> Result<()> {
+        handle_withdraw(ctx, amount)
     }
 
     pub fn freeze_vault(ctx: Context<FreezeVault>) -> Result<()> {
