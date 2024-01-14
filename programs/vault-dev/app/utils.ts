@@ -27,7 +27,7 @@ import { Wallet } from "@coral-xyz/anchor";
 export const createSPLToken = async (
   connection: Connection,
   wallet: Wallet,
-  authority: PublicKey
+  authority: PublicKey,
 ): Promise<PublicKey> => {
   const confirmOptions: ConfirmOptions = {
     commitment: "finalized",
@@ -37,7 +37,7 @@ export const createSPLToken = async (
     wallet.payer,
     authority, // can be anything but should be the vault program
     null, // dont need freeze authority now
-    6 // standard decimals for now
+    6, // standard decimals for now
   );
 };
 
@@ -86,7 +86,7 @@ export const decodeAmount = (amount: BN, decimals: number): string => {
  */
 export const getSPLTotalSupply = async (
   connection: Connection,
-  mintAddress: PublicKey
+  mintAddress: PublicKey,
 ): Promise<string> => {
   const mintAccountInfo = await connection.getAccountInfo(mintAddress);
   if (!mintAccountInfo) {
@@ -115,7 +115,7 @@ export const getOrCreateATA = async (
   wallet: Wallet,
   pubKey: PublicKey,
   tokenKey: PublicKey,
-  commitment?: Commitment
+  commitment?: Commitment,
 ): Promise<PublicKey> => {
   try {
     const ata = await getAssociatedTokenAddress(tokenKey, pubKey, true);
@@ -132,15 +132,52 @@ export const getOrCreateATA = async (
       wallet.payer,
       tokenKey,
       pubKey,
-      true
+      true,
     );
 
     console.log(
-      `Attached token account created, ATA: ${newATA.address.toString()}`
+      `Attached token account created, ATA: ${newATA.address.toString()}`,
     );
     return newATA.address; // Return the address of the new ATA
   } catch (err) {
     console.error("Error in getOrCreateATA:", err);
     throw new Error(err.message); // More specific error message
+  }
+};
+
+/**
+ * Gets the numeric balance of a given token associated token account.
+ *
+ * @param connection - The Solana blockchain connection.
+ * @param mint - The public key of the SPL token's mint account.
+ * @param owner - The public key of the ATA's owner.
+ * @param allowOwnerOffCurve - Whether or not to allow the owner to be off-curve. PDA's are off-curve.
+ * @returns A Promise that resolves to the balance of the ATA or undefined.
+ */
+export const safelyGetAccountBalance = async (
+  connection: Connection,
+  mint: PublicKey,
+  owner: PublicKey,
+  allowOwnerOffCurve: boolean = false,
+): Promise<number | undefined> => {
+  try {
+    // Vault USDC token account
+    const ataKey = await getAssociatedTokenAddress(
+      mint,
+      owner,
+      allowOwnerOffCurve,
+    );
+    if (!ataKey) {
+      console.debug(
+        `Owner key=${owner} does not have a USDC associated token account. Short-circuiting.`,
+      );
+      return;
+    }
+
+    const tokenAmount = await connection.getTokenAccountBalance(ataKey);
+    return tokenAmount.value.uiAmount;
+  } catch (err) {
+    console.error(`Error getting ATA account balance, error=${err}`);
+    return;
   }
 };
