@@ -6,16 +6,15 @@ use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount, Transfer};
 use core::mem::size_of;
 
 pub fn handle_create_vault(ctx: Context<CreateVault>) -> Result<()> {
-    let global_state = &mut ctx.accounts.global_state;
+    let state = &mut ctx.accounts.state;
 
     let vault = &mut ctx.accounts.vault;
     vault.creator = *ctx.accounts.authority.key;
-    vault.id = global_state.next_vault_id;
+    vault.id = state.next_vault_id;
     vault.is_frozen = false;
     vault.is_closed = false;
-    global_state.next_vault_id += 1;
+    state.next_vault_id += 1;
 
-    // Emit event for vault creation
     emit!(VaultCreated {
         creator: vault.creator,
         vault_id: vault.id,
@@ -25,14 +24,10 @@ pub fn handle_create_vault(ctx: Context<CreateVault>) -> Result<()> {
 }
 
 pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
-    let signer_key = ctx.accounts.signer.key();
-
-    msg!("Depositing {} USDC into vault from {}", amount, signer_key);
-
     // Validate deposit requirements
-    ctx.accounts.validate_deposit(&signer_key)?;
+    ctx.accounts.validate_deposit(&ctx.accounts.signer.key())?;
 
-    // Transfer capital from user to the vault
+    // 1. Deposit token from user ATA to the vault ATA
     let cpi_accounts = Transfer {
         from: ctx.accounts.user_token_account.to_account_info(),
         to: ctx.accounts.vault_token_account.to_account_info(),
@@ -41,16 +36,57 @@ pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
     token::transfer(cpi_ctx, amount)?;
 
-    // Emit event for vault deposit
+    // 2. Create user vToken ATA
+    // TODO: Implement
+
+    // 3. Mint tokens to the user's vault ATA
+    let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], ctx.program_id);
+    ctx.accounts.mint_tokens_to_user(amount, bump)?;
+
     emit!(VaultDeposit {
-        depositor: signer_key,
         amount: amount,
+        depositor: ctx.accounts.signer.key(),
+        vault_id: ctx.accounts.vault.id,
     });
 
-    // Mint tokens to the user's vault token account
-    let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], ctx.program_id);
+    Ok(())
+}
 
-    ctx.accounts.mint_tokens_to_user(amount, bump)?;
+pub fn handle_withdrawal(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
+    require!(
+        !ctx.accounts.vault.is_frozen,
+        MurkError::VaultFrozenError
+    );
+    require!(
+        !ctx.accounts.vault.is_closed,
+        MurkError::VaultClosedError
+    );
+    require!(
+        ctx.accounts.withdrawal_token_account.owner == ctx.accounts.signer.key(),
+        MurkError::InvalidTokenAccountOwnerError
+    );
+
+    // 1. Determine withdrawal amount from vault usdc ATA
+    // TODO: Implement
+
+    // 2. Transfer USDC from vault usdc ATA to user usdc ATA
+    let cpi_accounts = Transfer {
+        from: ctx.accounts.vault_token_account.to_account_info(),
+        to: ctx.accounts.withdrawal_token_account.to_account_info(),
+        authority: ctx.accounts.vault.to_account_info(),
+    };
+    let cpi_program = ctx.accounts.token_program.to_account_info();
+    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+    token::transfer(cpi_ctx, amount)?;
+
+    // 3. Burn vToken from user vToken ATA
+    // TODO: Implement
+
+    emit!(VaultWithdrawal {
+        vault_id: ctx.accounts.vault.id,
+        withdrawer: ctx.accounts.signer.key(),
+        amount: amount,
+    });
 
     Ok(())
 }
@@ -110,14 +146,14 @@ pub struct CreateVault<'info> {
 
     #[account(
         init,
-        seeds = [b"vault", global_state.next_vault_id.to_le_bytes().as_ref()],
+        seeds = [b"vault", state.next_vault_id.to_le_bytes().as_ref()],
         bump,
         payer = authority,
         space = 8 + size_of::<Vault>(),
     )]
     pub vault: Account<'info, Vault>,
     #[account(mut)]
-    pub global_state: Account<'info, State>,
+    pub state: Account<'info, State>,
     pub system_program: Program<'info, System>,
 }
 
@@ -183,9 +219,20 @@ impl Deposit<'_> {
 }
 
 #[derive(Accounts)]
-pub struct WithdrawUsdc<'info> {
+pub struct Withdraw<'info> {
+    pub signer: Signer<'info>,
+    #[account(
+        constraint = withdrawal_token_account.owner == signer.key(),
+    )]
+    #[account(mut)]
+    pub withdrawal_token_account: Account<'info, TokenAccount>,
+
     #[account(mut)]
     pub vault: Account<'info, Vault>,
+    #[account(mut)]
+    pub vault_token_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]

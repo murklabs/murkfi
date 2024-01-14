@@ -1,7 +1,7 @@
 [package]
 name = "murkfi"
 version = "0.1.0"
-description = "Created with Anchor"
+description = "Murk Finance Program Library"
 edition = "2021"
 
 [lib]
