@@ -167,7 +167,7 @@ pub struct CreateVault<'info> {
         seeds = [b"vault", global_state.next_vault_id.to_le_bytes().as_ref()],
         bump,
         payer = authority,
-        space = 8 + Vault::MAX_SIZE,
+        space = 8 + size_of::<Vault>(),
     )]
     pub vault: Account<'info, Vault>,
     #[account(mut)]
@@ -255,12 +255,6 @@ pub struct Vault {
     pub id: u64,
     pub is_frozen: bool,
     pub is_closed: bool,
-}
-
-impl Vault {
-    // Size requirement of Vault struct
-    // See space reference: https://book.anchor-lang.com/anchor_references/space.html
-    pub const MAX_SIZE: usize = 32 + 8 + 1 + 1;
 }
 
 #[account]
