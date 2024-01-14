@@ -12,8 +12,16 @@ pub struct VaultCreated {
 
 #[event]
 pub struct VaultDeposit {
-    pub depositor: Pubkey,
     pub amount: u64,
+    pub depositor: Pubkey,
+    pub vault_id: u64,
+}
+
+#[event]
+pub struct VaultWithdrawal {
+    pub amount: u64,
+    pub withdrawer: Pubkey,
+    pub vault_id: u64,
 }
 
 #[event]
