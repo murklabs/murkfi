@@ -30,8 +30,7 @@ describe("deposit", () => {
       provider.connection,
       wallet,
       wallet.publicKey,
-      usdcMintAddress,
-      "confirmed"
+      usdcMintAddress
     );
     let amount = BigInt(depositAmount);
     await mintTo(

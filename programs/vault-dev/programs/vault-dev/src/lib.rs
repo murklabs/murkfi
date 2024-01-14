@@ -1,11 +1,18 @@
+use crate::error::MurkError;
+use crate::instructions::*;
+use crate::state::events::*;
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount, Transfer};
 use core::mem::size_of;
 
+pub mod error;
+pub mod instructions;
+pub mod state;
+
 declare_id!("9qygbwmh55Af8efyfZxs2wE4iNwhbf5ac6xtcTV1QTwB");
 
 #[program]
-pub mod murk_vault_manager {
+pub mod murkfi {
     use super::*;
 
     pub fn create_vault(ctx: Context<CreateVault>) -> Result<()> {
@@ -253,65 +260,14 @@ pub struct InitializeGlobalState<'info> {
 pub struct Vault {
     pub creator: Pubkey,
     pub id: u64,
+    pub asset: Pubkey,
     pub is_frozen: bool,
     pub is_closed: bool,
+    pub max_deposit: u64,
 }
 
 #[account]
 pub struct GlobalState {
     pub next_vault_id: u64,
     pub is_initialized: bool,
-}
-
-/**
-* Events
-* https://book.anchor-lang.com/anchor_in_depth/events.html
-*/
-#[event]
-pub struct VaultCreated {
-    pub creator: Pubkey,
-    pub vault_id: u64,
-}
-
-#[event]
-pub struct VaultDeposit {
-    pub depositor: Pubkey,
-    pub amount: u64,
-}
-
-#[event]
-pub struct VaultFrozen {
-    pub vault_id: u64,
-}
-
-#[event]
-pub struct VaultUnfrozen {
-    pub vault_id: u64,
-}
-
-#[event]
-pub struct VaultClosed {
-    pub vault_id: u64,
-}
-
-/**
-* Errors
-* https://book.anchor-lang.com/anchor_in_depth/errors.html
-*/
-#[error_code]
-pub enum MurkError {
-    #[msg("Signer is not the owner of the token account")]
-    InvalidTokenAccountOwnerError,
-    #[msg("Signer is not vault creator. Action cannot be performed")]
-    UnauthorizedVaultAccessError,
-    #[msg("Vault is frozen. Action cannot be performed")]
-    VaultFrozenError,
-    #[msg("Vault is not frozen. Action cannot be performed")]
-    VaultUnfrozenError,
-    #[msg("Vault is closed. Action cannot be performed")]
-    VaultClosedError,
-    #[msg("Invalid mint authority")]
-    InvalidMintAuthority,
-    #[msg("Program state already initialized")]
-    AlreadyInitialized,
 }
