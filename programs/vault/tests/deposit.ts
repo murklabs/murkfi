@@ -10,37 +10,34 @@ import { TOKEN_PROGRAM_ID, mintTo } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 
-const VAULT_ID = 1;
 const DEPOSIT_AMOUNT = 1000;
 
-describe("deposit", () => {
+describe("murfi-deposit", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
   const wallet = anchor.Wallet.local();
   const program = anchor.workspace.Murkfi as anchor.Program<Murkfi>;
 
-  const [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("vault", "utf8"),
-      new BN(VAULT_ID).toArrayLike(Buffer, "le", 8),
-    ],
+  const [stateAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from("state")],
     program.programId,
   );
+  const [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("vault", "utf8"), new BN(1).toArrayLike(Buffer, "le", 8)],
+    program.programId,
+  );
+
   let usdcMintAddress: PublicKey | null = null;
   let userUsdcATA: PublicKey | null = null;
 
   it("when initializing program then global state defaults are accurate", async () => {
     // Act
-    let [globalStateAddress] = PublicKey.findProgramAddressSync(
-      [Buffer.from("global_state")],
-      program.programId,
-    );
     try {
       await program.methods
         .initializeState()
         .accounts({
-          globalState: globalStateAddress,
+          state: stateAddress,
           authority: wallet.publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
@@ -51,9 +48,9 @@ describe("deposit", () => {
     }
 
     // Assert
-    const globalState = await program.account.state.fetch(globalStateAddress);
-    assert.equal(globalState.isInitialized, true);
-    assert.equal(globalState.nextVaultId, 1);
+    const state = await program.account.state.fetch(stateAddress);
+    assert.equal(state.isInitialized, true);
+    assert.equal(state.nextVaultId, 1);
   });
 
   it("when creating a vault then vault fields are consistent with signer + payload", async () => {
@@ -69,6 +66,7 @@ describe("deposit", () => {
       const txnHash = await program.methods
         .createVault()
         .accounts({
+          state: stateAddress,
           authority: program.provider.publicKey,
           vault: vaultAccountAddress,
           systemProgram: anchor.web3.SystemProgram.programId,
@@ -76,14 +74,20 @@ describe("deposit", () => {
         .signers([wallet.payer])
         .rpc();
       console.log(
-        `Created new vault id=${VAULT_ID}, accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`,
+        `Created new vault accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`,
       );
     }
 
     // Assert
-    const vaultAccount = await program.account.vault.fetch(vaultAccountAddress);
-    assert.equal(vaultAccount.creator, wallet.publicKey.toBase58());
-    assert.equal(vaultAccount.id, VAULT_ID);
+    try {
+      const vaultAccount = await program.account.vault.fetch(
+        vaultAccountAddress,
+      );
+      assert.equal(vaultAccount.creator, wallet.publicKey.toBase58());
+      assert.equal(vaultAccount.id, 1);
+    } catch (e) {
+      assert.fail(e);
+    }
   });
 
   it("when minting USDC to user address then successful ata creation + mint to", async () => {
@@ -255,13 +259,12 @@ describe("deposit", () => {
         .withdrawUsdc(new BN(DEPOSIT_AMOUNT))
         .accounts({
           vault: vaultAccountAddress,
-          withdrawingWallet: vaultUsdcATA,
-          userTokenAccount: userUsdcATA,
+          withdrawalTokenAccount: userUsdcATA,
           signer: provider.wallet.publicKey,
-          mint: vaultTokenMintAddress,
-          userVaultTokenAccount: userVaultTokenATA,
-          mintAuthority: mintAuthorityPDA,
-          tokenProgram: TOKEN_PROGRAM_ID,
+          // mint: vaultTokenMintAddress,
+          // userVaultTokenAccount: userVaultTokenATA,
+          // mintAuthority: mintAuthorityPDA,
+          // tokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([wallet.payer])
         .rpc();
