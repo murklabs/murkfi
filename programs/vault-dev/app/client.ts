@@ -17,7 +17,7 @@ import {
   getOrCreateAssociatedTokenAccount,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import type { MurkVaultManager } from "../target/types/murk_vault_manager";
+import type { Murkfi } from "../target/types/murkfi";
 import { Connection, Keypair } from "@solana/web3.js";
 import fs from "fs";
 
@@ -39,8 +39,7 @@ const opts: ConfirmOptions = {
 const provider = new anchor.AnchorProvider(connection, wallet, opts);
 anchor.setProvider(provider);
 
-const program = anchor.workspace
-  .MurkVaultManager as anchor.Program<MurkVaultManager>;
+const program = anchor.workspace.MurkVaultManager as anchor.Program<Murkfi>;
 
 const USDC_MINT_ADDRESS = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"; // USDC token address on devnet
 const VAULT_ID = 1;
