@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 
+use crate::state::guardian::Guardian;
+
 #[account]
 #[derive(Default)]
 pub struct Vault {
@@ -9,5 +11,13 @@ pub struct Vault {
     pub is_frozen: bool,
     pub is_closed: bool,
     pub max_deposit: u64,
-    pub gaurdians: [Pubkey; 3],
+    pub guardians: [Guardian; 3],
+}
+
+impl Vault {
+    pub fn is_guardian(&self, pubkey: Pubkey) -> bool {
+        self.guardians
+            .iter()
+            .any(|guardian| guardian.pubkey == pubkey)
+    }
 }
