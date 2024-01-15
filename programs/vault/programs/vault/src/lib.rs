@@ -11,6 +11,11 @@ declare_id!("9qygbwmh55Af8efyfZxs2wE4iNwhbf5ac6xtcTV1QTwB");
 pub mod murkfi {
     use super::*;
 
+    // Run after program deployment to initialize global state
+    pub fn initialize_state(ctx: Context<InitializeState>) -> Result<()> {
+        handle_initialize_state(ctx)
+    }
+
     pub fn create_vault(ctx: Context<CreateVault>) -> Result<()> {
         handle_create_vault(ctx)
     }
@@ -34,10 +39,5 @@ pub mod murkfi {
     // This is an irreversible action and vault will be permanently closed
     pub fn close_vault(ctx: Context<CloseVault>) -> Result<()> {
         handle_close_vault(ctx)
-    }
-
-    // Run after program deployment to initialize global state
-    pub fn initialize_state(ctx: Context<InitializeState>) -> Result<()> {
-        handle_initialize_state(ctx)
     }
 }
