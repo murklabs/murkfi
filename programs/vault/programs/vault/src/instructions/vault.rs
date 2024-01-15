@@ -56,7 +56,7 @@ pub fn handle_withdrawal(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     ctx.accounts.withdraw_from_vault(ctx.program_id, amount)?;
 
     // 3. Burn vToken from user vToken ATA
-    // ctx.accounts.burn_vtoken_from_user(amount)?;
+    ctx.accounts.burn_vtoken_from_user(ctx.program_id, amount)?;
 
     emit!(VaultWithdrawal {
         amount: amount,
@@ -188,18 +188,19 @@ impl Deposit<'_> {
         let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], program_id);
         let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
         let signer = &[&seeds[..]];
-        token::mint_to(
-            CpiContext::new_with_signer(
-                self.token_program.to_account_info(),
-                MintTo {
-                    mint: self.mint.to_account_info(),
-                    to: self.user_vault_token_account.to_account_info(),
-                    authority: self.mint_authority.to_account_info(),
-                },
-                signer,
-            ),
-            amount,
-        )?;
+
+        let cpi_program = self.token_program.to_account_info();
+        let cpi_accounts = MintTo {
+            mint: self.mint.to_account_info(),
+            to: self.user_vault_token_account.to_account_info(),
+            authority: self.mint_authority.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new_with_signer(
+            cpi_program,
+            cpi_accounts,
+            signer,
+        );
+        token::mint_to(cpi_ctx, amount)?;
 
         Ok(())
     }
@@ -213,6 +214,8 @@ pub struct Withdraw<'info> {
     )]
     #[account(mut)]
     pub withdrawal_token_account: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub user_vault_token_account: Account<'info, TokenAccount>,
 
     pub mint: Account<'info, Mint>,
 
@@ -236,6 +239,13 @@ impl Withdraw<'_> {
         Ok(())
     }
     fn withdraw_from_vault(&self, program_id: &Pubkey, amount: u64) -> Result<()> {
+        let cpi_program = self.token_program.to_account_info();
+        let cpi_accounts = Transfer {
+            from: self.vault_token_account.to_account_info(),
+            to: self.withdrawal_token_account.to_account_info(),
+            authority: self.vault.to_account_info(),
+        };
+
         let vault_id_bytes: [u8; 8] = self.vault.id.to_le_bytes();
         let (_, bump) = Pubkey::find_program_address(
             &[b"vault", vault_id_bytes.as_ref()],
@@ -244,25 +254,32 @@ impl Withdraw<'_> {
         let seeds: &[&[u8]; 3] = &[b"vault", vault_id_bytes.as_ref(), &[bump][..]];
         let signer = &[&seeds[..]];
 
-        let cpi_program = self.token_program.to_account_info();
-        let cpi_accounts = Transfer {
-            from: self.vault_token_account.to_account_info(),
-            to: self.withdrawal_token_account.to_account_info(),
-            authority: self.vault.to_account_info(),
-        };
-        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
+        let cpi_ctx = CpiContext::new_with_signer(
+            cpi_program,
+            cpi_accounts,
+            signer,
+        );
         token::transfer(cpi_ctx, amount)?;
 
         Ok(())
     }
-    fn burn_vtoken_from_user(&self, amount: u64) -> Result<()> {
+    fn burn_vtoken_from_user(&self, program_id: &Pubkey, amount: u64) -> Result<()> {
+        let cpi_program: AccountInfo<'_> = self.token_program.to_account_info();
         let cpi_accounts = Burn {
             mint: self.mint.to_account_info(),
-            from: self.vault_token_account.to_account_info(),
+            from: self.user_vault_token_account.to_account_info(),
             authority: self.signer.to_account_info(),
         };
-        let cpi_program = self.token_program.to_account_info();
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+
+        let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], program_id);
+        let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
+        let signer = &[&seeds[..]];
+
+        let cpi_ctx: CpiContext<'_, '_, '_, '_, Burn<'_>> = CpiContext::new_with_signer(
+            cpi_program,
+            cpi_accounts,
+            signer,
+        );
         token::burn(cpi_ctx, amount)?;
 
         Ok(())
