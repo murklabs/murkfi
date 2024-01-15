@@ -12,7 +12,7 @@ import { BN } from "@coral-xyz/anchor";
 
 const DEPOSIT_AMOUNT = 1000;
 
-describe("murfi-deposit", () => {
+describe("murkfi-deposit", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
@@ -27,9 +27,14 @@ describe("murfi-deposit", () => {
     [Buffer.from("vault", "utf8"), new BN(1).toArrayLike(Buffer, "le", 8)],
     program.programId,
   );
+  const [mintAuthorityPDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from("mint_authority")],
+    program.programId,
+  );
 
   let usdcMintAddress: PublicKey | null = null;
   let userUsdcATA: PublicKey | null = null;
+  let vaultTokenMintAddress: PublicKey | null = null;
 
   it("when initializing program then global state defaults are accurate", async () => {
     // Act
@@ -104,7 +109,6 @@ describe("murfi-deposit", () => {
         wallet,
         wallet.publicKey,
         usdcMintAddress,
-        "confirmed",
       );
 
       await mintTo(
@@ -127,7 +131,6 @@ describe("murfi-deposit", () => {
       assert.ok(userUsdcAccountBalance);
       assert.equal(userUsdcAccountBalance * 1000000, DEPOSIT_AMOUNT);
     } catch (e) {
-      console.log(e);
       assert.fail(e);
     }
   });
@@ -150,11 +153,7 @@ describe("murfi-deposit", () => {
       );
       assert.equal(vaultUsdcBalanceBefore, 0);
 
-      const [mintAuthorityPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("mint_authority")],
-        program.programId,
-      );
-      const vaultTokenMintAddress = await createSPLToken(
+      vaultTokenMintAddress = await createSPLToken(
         provider.connection,
         wallet,
         mintAuthorityPDA,
@@ -177,7 +176,7 @@ describe("murfi-deposit", () => {
       assert.equal(userVaultTokenBalanceBefore, 0);
 
       await program.methods
-        .depositUsdc(new BN(DEPOSIT_AMOUNT))
+        .deposit(new BN(DEPOSIT_AMOUNT))
         .accounts({
           vault: vaultAccountAddress,
           vaultTokenAccount: vaultUsdcATA,
@@ -229,16 +228,6 @@ describe("murfi-deposit", () => {
       );
       assert.equal(vaultUsdcBalanceBefore * 1000000, DEPOSIT_AMOUNT);
 
-      const [mintAuthorityPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("mint_authority")],
-        program.programId,
-      );
-      const vaultTokenMintAddress = await createSPLToken(
-        provider.connection,
-        wallet,
-        mintAuthorityPDA,
-      );
-
       const userVaultTokenATA = await getOrCreateATA(
         provider.connection,
         wallet,
@@ -256,15 +245,13 @@ describe("murfi-deposit", () => {
       assert.equal(userVaultTokenBalanceBefore * 1000000, DEPOSIT_AMOUNT);
 
       await program.methods
-        .withdrawUsdc(new BN(DEPOSIT_AMOUNT))
+        .withdraw(new BN(DEPOSIT_AMOUNT))
         .accounts({
-          vault: vaultAccountAddress,
-          withdrawalTokenAccount: userUsdcATA,
           signer: provider.wallet.publicKey,
-          // mint: vaultTokenMintAddress,
-          // userVaultTokenAccount: userVaultTokenATA,
-          // mintAuthority: mintAuthorityPDA,
-          // tokenProgram: TOKEN_PROGRAM_ID,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          vault: vaultAccountAddress,
+          vaultTokenAccount: vaultUsdcATA,
+          withdrawalTokenAccount: userUsdcATA,
         })
         .signers([wallet.payer])
         .rpc();
@@ -285,6 +272,7 @@ describe("murfi-deposit", () => {
       );
       assert.equal(userVaultTokenBalanceAfter, 0);
     } catch (e) {
+      console.error(e);
       assert.fail(e);
     }
   });

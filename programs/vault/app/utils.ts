@@ -1,11 +1,5 @@
 import BN from "bn.js";
-import {
-  PublicKey,
-  Connection,
-  Commitment,
-  ConfirmOptions,
-  Keypair,
-} from "@solana/web3.js";
+import { PublicKey, Connection, Commitment } from "@solana/web3.js";
 import {
   MintLayout,
   createMint,
@@ -29,9 +23,6 @@ export const createSPLToken = async (
   wallet: Wallet,
   authority: PublicKey,
 ): Promise<PublicKey> => {
-  const confirmOptions: ConfirmOptions = {
-    commitment: "finalized",
-  };
   return await createMint(
     connection,
     wallet.payer,
@@ -115,18 +106,15 @@ export const getOrCreateATA = async (
   wallet: Wallet,
   pubKey: PublicKey,
   tokenKey: PublicKey,
-  commitment?: Commitment,
 ): Promise<PublicKey> => {
   try {
     const ata = await getAssociatedTokenAddress(tokenKey, pubKey, true);
-    console.log(`ATA: ${ata}`);
     const ataInfo = await connection.getAccountInfo(ata);
     if (ataInfo) {
-      console.log(`Attached token account exists, ATA: ${ata}`);
+      console.debug(`Attached token account exists, ATA: ${ata}`);
       return ata; // ATA exists, return its address
     }
 
-    console.log("ATA does not exist, creating...");
     const newATA = await getOrCreateAssociatedTokenAccount(
       connection,
       wallet.payer,
@@ -161,7 +149,6 @@ export const safelyGetAccountBalance = async (
   allowOwnerOffCurve: boolean = false,
 ): Promise<number | undefined> => {
   try {
-    // Vault USDC token account
     const ataKey = await getAssociatedTokenAddress(
       mint,
       owner,

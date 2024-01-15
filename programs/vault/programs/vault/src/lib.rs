@@ -15,11 +15,11 @@ pub mod murkfi {
         handle_create_vault(ctx)
     }
 
-    pub fn deposit_usdc(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+    pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         handle_deposit(ctx, amount)
     }
 
-    pub fn withdraw_usdc(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
+    pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         handle_withdrawal(ctx, amount)
     }
 
