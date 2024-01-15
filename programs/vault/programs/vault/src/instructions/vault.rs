@@ -25,7 +25,7 @@ pub fn handle_create_vault(ctx: Context<CreateVault>) -> Result<()> {
 
 pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     // Validate deposit requirements
-    ctx.accounts.validate_deposit(&ctx.accounts.signer.key())?;
+    ctx.accounts.validate_deposit()?;
 
     // 1. Deposit token from user ATA to the vault ATA
     let cpi_accounts = Transfer {
@@ -33,7 +33,8 @@ pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         to: ctx.accounts.vault_token_account.to_account_info(),
         authority: ctx.accounts.signer.to_account_info(),
     };
-    let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
+    let cpi_program = ctx.accounts.token_program.to_account_info();
+    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
     token::transfer(cpi_ctx, amount)?;
 
     // 2. Create user vToken ATA
@@ -53,39 +54,36 @@ pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
 }
 
 pub fn handle_withdrawal(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
-    require!(
-        !ctx.accounts.vault.is_frozen,
-        MurkError::VaultFrozenError
-    );
-    require!(
-        !ctx.accounts.vault.is_closed,
-        MurkError::VaultClosedError
-    );
-    require!(
-        ctx.accounts.withdrawal_token_account.owner == ctx.accounts.signer.key(),
-        MurkError::InvalidTokenAccountOwnerError
-    );
+    // Validate withdrawal requirements
+    ctx.accounts.validate_withdrawal()?;
 
     // 1. Determine withdrawal amount from vault usdc ATA
     // TODO: Implement
 
     // 2. Transfer USDC from vault usdc ATA to user usdc ATA
+    let (_, bump) = Pubkey::find_program_address(
+        &[b"vault", ctx.accounts.vault.id.to_le_bytes().as_ref()],
+        ctx.program_id,
+    );
+    let vault_id = ctx.accounts.vault.id.to_le_bytes();
+    let seeds: &[&[u8]; 3] = &[b"vault", vault_id.as_ref(), &[bump][..]];
+    let signer = &[&seeds[..]];
     let cpi_accounts = Transfer {
         from: ctx.accounts.vault_token_account.to_account_info(),
         to: ctx.accounts.withdrawal_token_account.to_account_info(),
         authority: ctx.accounts.vault.to_account_info(),
     };
     let cpi_program = ctx.accounts.token_program.to_account_info();
-    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+    let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
     token::transfer(cpi_ctx, amount)?;
 
     // 3. Burn vToken from user vToken ATA
     // TODO: Implement
 
     emit!(VaultWithdrawal {
+        amount: amount,
         vault_id: ctx.accounts.vault.id,
         withdrawer: ctx.accounts.signer.key(),
-        amount: amount,
     });
 
     Ok(())
@@ -186,11 +184,9 @@ pub struct Deposit<'info> {
 }
 
 impl Deposit<'_> {
-    fn validate_deposit(&self, signer_key: &Pubkey) -> Result<()> {
-        let user_token_account = &self.user_token_account;
-
+    fn validate_deposit(&self) -> Result<()> {
         require!(
-            user_token_account.owner == *signer_key,
+            self.user_token_account.owner == self.signer.key(),
             MurkError::InvalidTokenAccountOwnerError
         );
         require!(!self.vault.is_frozen, MurkError::VaultFrozenError);
@@ -199,7 +195,7 @@ impl Deposit<'_> {
         Ok(())
     }
     fn mint_tokens_to_user(&self, amount: u64, bump: u8) -> Result<()> {
-        let seeds = &[b"mint_authority", &[bump][..]];
+        let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
         let signer = &[&seeds[..]];
         token::mint_to(
             CpiContext::new_with_signer(
@@ -220,6 +216,7 @@ impl Deposit<'_> {
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
+    #[account(signer)]
     pub signer: Signer<'info>,
     #[account(
         constraint = withdrawal_token_account.owner == signer.key(),
@@ -233,6 +230,19 @@ pub struct Withdraw<'info> {
     pub vault_token_account: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
+}
+
+impl Withdraw<'_> {
+    fn validate_withdrawal(&self) -> Result<()> {
+        require!(
+            self.withdrawal_token_account.owner == self.signer.key(),
+            MurkError::InvalidTokenAccountOwnerError
+        );
+        require!(!self.vault.is_frozen, MurkError::VaultFrozenError);
+        require!(!self.vault.is_closed, MurkError::VaultClosedError);
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
