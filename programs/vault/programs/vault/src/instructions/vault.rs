@@ -174,28 +174,29 @@ impl Deposit<'_> {
         Ok(())
     }
     fn deposit_to_vault(&self, amount: u64) -> Result<()> {
+        let cpi_program = self.token_program.to_account_info();
         let cpi_accounts = Transfer {
             from: self.user_token_account.to_account_info(),
             to: self.vault_token_account.to_account_info(),
             authority: self.signer.to_account_info(),
         };
-        let cpi_program = self.token_program.to_account_info();
         let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
         token::transfer(cpi_ctx, amount)?;
 
         Ok(())
     }
     fn mint_vtokens_to_user(&self, program_id: &Pubkey, amount: u64) -> Result<()> {
-        let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], program_id);
-        let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
-        let signer = &[&seeds[..]];
-
         let cpi_program = self.token_program.to_account_info();
         let cpi_accounts = MintTo {
             mint: self.mint.to_account_info(),
             to: self.user_vault_token_account.to_account_info(),
             authority: self.mint_authority.to_account_info(),
         };
+
+        let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], program_id);
+        let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
+        let signer = &[&seeds[..]];
+
         let cpi_ctx = CpiContext::new_with_signer(
             cpi_program,
             cpi_accounts,
