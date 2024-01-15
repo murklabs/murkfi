@@ -9,4 +9,5 @@ pub struct Vault {
     pub is_frozen: bool,
     pub is_closed: bool,
     pub max_deposit: u64,
+    pub gaurdians: [Pubkey; 3],
 }

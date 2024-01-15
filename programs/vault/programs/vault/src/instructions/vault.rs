@@ -1,10 +1,11 @@
 use crate::error::MurkError;
 use crate::state::events::*;
 use crate::state::{state::State, vault::Vault};
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, solana_program::program_pack::Pack};
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
 use core::mem::size_of;
+use spl_token::state::Account as TokenAccountData;
 
 pub fn handle_create_vault(ctx: Context<CreateVault>) -> Result<()> {
     let state = &mut ctx.accounts.state;
@@ -25,6 +26,7 @@ pub fn handle_create_vault(ctx: Context<CreateVault>) -> Result<()> {
 }
 
 pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+    ctx.accounts.validate_ata()?;
     // Validate deposit requirements
     ctx.accounts.validate_deposit()?;
 
@@ -137,11 +139,13 @@ pub struct Deposit<'info> {
 
     #[account(mut)]
     pub vault: Account<'info, Vault>,
+
+    // This is the vault's ATA for the token they are depositing
     #[account(mut)]
     pub vault_token_account: Account<'info, TokenAccount>,
 
-    #[account(
-        constraint = user_token_account.owner == signer.key(),
+    // This is the user's ATA for the token they are depositing
+    #[account(mut, constraint = user_token_account.owner == signer.key(),
     )]
     pub user_token_account: Account<'info, TokenAccount>,
 
@@ -161,6 +165,8 @@ pub struct Deposit<'info> {
     #[account(seeds = [b"mint_authority"], bump)]
     pub mint_authority: AccountInfo<'info>,
 
+    // this is needed to create the associated token account if not already created
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -197,6 +203,25 @@ impl Deposit<'_> {
         };
 
         let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], program_id);
+    fn validate_ata(&self) -> Result<()> {
+        if self.user_vault_token_account.to_account_info().data_len() > 0 {
+            let ata_data = TokenAccountData::unpack(
+                &self
+                    .user_vault_token_account
+                    .to_account_info()
+                    .data
+                    .borrow(),
+            )?;
+            // Ensure the ATA is for the correct mint
+            require!(
+                ata_data.mint == self.mint.key(),
+                MurkError::InvalidTokenAccountOwnerError
+            );
+        }
+
+        Ok(())
+    }
+    fn mint_tokens_to_user(&self, amount: u64, bump: u8) -> Result<()> {
         let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
         let signer = &[&seeds[..]];
 

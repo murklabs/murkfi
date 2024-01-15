@@ -40,4 +40,9 @@ pub mod murkfi {
     pub fn close_vault(ctx: Context<CloseVault>) -> Result<()> {
         handle_close_vault(ctx)
     }
+
+    // Admin
+    pub fn create_guardian(ctx: Context<CreateGuardian>) -> Result<()> {
+        handle_create_gaurdian(ctx)
+    }
 }
