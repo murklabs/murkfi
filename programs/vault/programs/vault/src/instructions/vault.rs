@@ -135,12 +135,12 @@ pub struct CreateVault<'info> {
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {
+    pub signer: Signer<'info>,
+
     #[account(mut)]
     pub vault: Account<'info, Vault>,
     #[account(mut)]
     pub vault_token_account: Account<'info, TokenAccount>,
-    #[account(mut)]
-    pub mint: Account<'info, Mint>,
 
     #[account(
         constraint = user_token_account.owner == signer.key(),
@@ -151,12 +151,13 @@ pub struct Deposit<'info> {
     #[account(mut)]
     pub user_vault_token_account: Account<'info, TokenAccount>,
 
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
     /// CHECK: The `mint_authority` is a PDA derived with known seeds and is used
     /// as the mint authority for the token. We ensure it matches the derived address
     /// and is the correct authority for minting tokens.
     #[account(seeds = [b"mint_authority"], bump)]
     pub mint_authority: AccountInfo<'info>,
-    pub signer: Signer<'info>,
 
     pub token_program: Program<'info, Token>,
 }
@@ -209,6 +210,7 @@ impl Deposit<'_> {
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
     pub signer: Signer<'info>,
+
     #[account(
         constraint = withdrawal_token_account.owner == signer.key(),
     )]
@@ -218,6 +220,11 @@ pub struct Withdraw<'info> {
     pub user_vault_token_account: Account<'info, TokenAccount>,
 
     pub mint: Account<'info, Mint>,
+    /// CHECK: The `mint_authority` is a PDA derived with known seeds and is used
+    /// as the mint authority for the token. We ensure it matches the derived address
+    /// and is the correct authority for minting tokens.
+    #[account(seeds = [b"mint_authority"], bump)]
+    pub mint_authority: AccountInfo<'info>,
 
     #[account(mut)]
     pub vault: Account<'info, Vault>,
@@ -268,7 +275,7 @@ impl Withdraw<'_> {
         let cpi_accounts = Burn {
             mint: self.mint.to_account_info(),
             from: self.user_vault_token_account.to_account_info(),
-            authority: self.signer.to_account_info(),
+            authority: self.mint_authority.to_account_info(),
         };
 
         let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], program_id);
