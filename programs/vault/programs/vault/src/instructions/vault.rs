@@ -2,7 +2,8 @@ use crate::error::MurkError;
 use crate::state::events::*;
 use crate::state::{state::State, vault::Vault};
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount, Transfer, Burn};
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
 use core::mem::size_of;
 
 pub fn handle_create_vault(ctx: Context<CreateVault>) -> Result<()> {
@@ -142,10 +143,14 @@ pub struct Deposit<'info> {
     #[account(
         constraint = user_token_account.owner == signer.key(),
     )]
-    #[account(mut)]
     pub user_token_account: Account<'info, TokenAccount>,
 
-    #[account(mut)]
+    #[account(
+        init_if_needed,
+        payer = signer,
+        associated_token::mint = mint,
+        associated_token::authority = signer
+    )]
     pub user_vault_token_account: Account<'info, TokenAccount>,
 
     #[account(mut)]
@@ -157,6 +162,7 @@ pub struct Deposit<'info> {
     pub mint_authority: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
 }
 
 impl Deposit<'_> {
@@ -194,11 +200,7 @@ impl Deposit<'_> {
         let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
         let signer = &[&seeds[..]];
 
-        let cpi_ctx = CpiContext::new_with_signer(
-            cpi_program,
-            cpi_accounts,
-            signer,
-        );
+        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
         token::mint_to(cpi_ctx, amount)?;
 
         Ok(())
@@ -256,18 +258,12 @@ impl Withdraw<'_> {
         };
 
         let vault_id_bytes: [u8; 8] = self.vault.id.to_le_bytes();
-        let (_, bump) = Pubkey::find_program_address(
-            &[b"vault", vault_id_bytes.as_ref()],
-            program_id,
-        );
+        let (_, bump) =
+            Pubkey::find_program_address(&[b"vault", vault_id_bytes.as_ref()], program_id);
         let seeds: &[&[u8]; 3] = &[b"vault", vault_id_bytes.as_ref(), &[bump][..]];
         let signer = &[&seeds[..]];
 
-        let cpi_ctx = CpiContext::new_with_signer(
-            cpi_program,
-            cpi_accounts,
-            signer,
-        );
+        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
         token::transfer(cpi_ctx, amount)?;
 
         Ok(())
@@ -280,10 +276,7 @@ impl Withdraw<'_> {
             authority: self.signer.to_account_info(),
         };
 
-        let cpi_ctx = CpiContext::new(
-            cpi_program,
-            cpi_accounts,
-        );
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
         token::burn(cpi_ctx, amount)?;
 
         Ok(())
