@@ -252,6 +252,7 @@ describe("murkfi-deposit", () => {
           tokenProgram: TOKEN_PROGRAM_ID,
           vault: vaultAccountAddress,
           vaultTokenAccount: vaultUsdcATA,
+          userVaultTokenAccount: userVaultTokenATA,
           withdrawalTokenAccount: userUsdcATA,
         })
         .signers([wallet.payer])
@@ -275,8 +276,7 @@ describe("murkfi-deposit", () => {
         "🚀 ~ it ~ userVaultTokenBalanceAfter:",
         userVaultTokenBalanceAfter,
       );
-      // TODO: Make pass
-      // assert.equal(userVaultTokenBalanceAfter, 0);
+      assert.equal(userVaultTokenBalanceAfter, 0);
     } catch (e) {
       console.error(e);
       assert.fail(e);
