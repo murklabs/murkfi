@@ -7,7 +7,6 @@ use core::mem::size_of;
 
 pub fn handle_create_vault(ctx: Context<CreateVault>) -> Result<()> {
     let state = &mut ctx.accounts.state;
-
     let vault = &mut ctx.accounts.vault;
     vault.creator = *ctx.accounts.authority.key;
     vault.id = state.next_vault_id;
@@ -27,10 +26,10 @@ pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     // Validate deposit requirements
     ctx.accounts.validate_deposit()?;
 
-    // 1. Deposit token from user ATA to the vault ATA
+    // Deposit token from user ATA to the vault ATA
     ctx.accounts.deposit_to_vault(amount)?;
 
-    // 2. Mint tokens to the user's vault ATA
+    // Mint tokens to the user's vault ATA
     ctx.accounts.mint_vtokens_to_user(ctx.program_id, amount)?;
 
     emit!(VaultDeposit {
@@ -46,13 +45,10 @@ pub fn handle_withdrawal(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     // Validate withdrawal requirements
     ctx.accounts.validate_withdrawal()?;
 
-    // 1. Determine withdrawal amount from vault usdc ATA
-    // TODO: Implement
-
-    // 2. Transfer USDC from vault usdc ATA to user usdc ATA
+    // Transfer token from vault ATA to user ATA
     ctx.accounts.withdraw_from_vault(ctx.program_id, amount)?;
 
-    // 3. Burn vToken from user vToken ATA
+    // Burn vToken from user vToken ATA
     ctx.accounts.burn_vtoken_from_user(amount)?;
 
     emit!(VaultWithdrawal {
@@ -65,11 +61,11 @@ pub fn handle_withdrawal(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
 }
 
 pub fn handle_freeze_vault(ctx: Context<FreezeVault>) -> Result<()> {
-    require!(
-        ctx.accounts.vault.creator == ctx.accounts.signer.key(),
-        MurkError::UnauthorizedVaultAccessError
+    require_keys_eq!(
+        ctx.accounts.vault.creator, ctx.accounts.signer.key(),
+        MurkError::UnauthorizedVaultAccess
     );
-    require!(!ctx.accounts.vault.is_frozen, MurkError::VaultFrozenError);
+    require!(!ctx.accounts.vault.is_frozen, MurkError::VaultFrozen);
 
     let vault = &mut ctx.accounts.vault;
     vault.is_frozen = true;
@@ -80,11 +76,11 @@ pub fn handle_freeze_vault(ctx: Context<FreezeVault>) -> Result<()> {
 }
 
 pub fn handle_unfreeze_vault(ctx: Context<UnfreezeVault>) -> Result<()> {
-    require!(
-        ctx.accounts.vault.creator == ctx.accounts.signer.key(),
-        MurkError::UnauthorizedVaultAccessError
+    require_keys_eq!(
+        ctx.accounts.vault.creator, ctx.accounts.signer.key(),
+        MurkError::UnauthorizedVaultAccess
     );
-    require!(ctx.accounts.vault.is_frozen, MurkError::VaultUnfrozenError);
+    require!(ctx.accounts.vault.is_frozen, MurkError::VaultUnfrozen);
 
     let vault = &mut ctx.accounts.vault;
     vault.is_frozen = false;
@@ -96,11 +92,11 @@ pub fn handle_unfreeze_vault(ctx: Context<UnfreezeVault>) -> Result<()> {
 
 // This is an irreversible action and vault will be permanently closed
 pub fn handle_close_vault(ctx: Context<CloseVault>) -> Result<()> {
-    require!(
-        ctx.accounts.vault.creator == ctx.accounts.signer.key(),
-        MurkError::UnauthorizedVaultAccessError
+    require_keys_eq!(
+        ctx.accounts.vault.creator, ctx.accounts.signer.key(),
+        MurkError::UnauthorizedVaultAccess
     );
-    require!(!ctx.accounts.vault.is_closed, MurkError::VaultClosedError);
+    require!(!ctx.accounts.vault.is_closed, MurkError::VaultClosed);
 
     // TODO: Implement redistribution of funds to vault depositors
 
@@ -161,12 +157,12 @@ pub struct Deposit<'info> {
 
 impl Deposit<'_> {
     fn validate_deposit(&self) -> Result<()> {
-        require!(
-            self.user_token_account.owner == self.signer.key(),
-            MurkError::InvalidTokenAccountOwnerError
+        require_keys_eq!(
+            self.user_token_account.owner, self.signer.key(),
+            MurkError::InvalidTokenAccountOwner
         );
-        require!(!self.vault.is_frozen, MurkError::VaultFrozenError);
-        require!(!self.vault.is_closed, MurkError::VaultClosedError);
+        require!(!self.vault.is_frozen, MurkError::VaultFrozen);
+        require!(!self.vault.is_closed, MurkError::VaultClosed);
 
         Ok(())
     }
@@ -234,16 +230,16 @@ pub struct Withdraw<'info> {
 
 impl Withdraw<'_> {
     fn validate_withdrawal(&self) -> Result<()> {
-        require!(
-            self.withdrawal_token_account.owner == self.signer.key(),
-            MurkError::InvalidTokenAccountOwnerError
+        require_keys_eq!(
+            self.withdrawal_token_account.owner, self.signer.key(),
+            MurkError::InvalidTokenAccountOwner
         );
-        require!(
-            self.user_vault_token_account.owner == self.signer.key(),
-            MurkError::InvalidTokenAccountOwnerError
+        require_keys_eq!(
+            self.user_vault_token_account.owner, self.signer.key(),
+            MurkError::InvalidTokenAccountOwner
         );
-        require!(!self.vault.is_frozen, MurkError::VaultFrozenError);
-        require!(!self.vault.is_closed, MurkError::VaultClosedError);
+        require!(!self.vault.is_frozen, MurkError::VaultFrozen);
+        require!(!self.vault.is_closed, MurkError::VaultClosed);
 
         Ok(())
     }
