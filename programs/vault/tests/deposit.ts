@@ -274,7 +274,6 @@ describe("murkfi-deposit", () => {
       );
       assert.equal(userVaultTokenBalanceAfter, 0);
     } catch (e) {
-      console.error(e);
       assert.fail(e);
     }
   });
