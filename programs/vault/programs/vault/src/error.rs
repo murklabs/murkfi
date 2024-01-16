@@ -7,15 +7,15 @@ use anchor_lang::prelude::*;
 #[error_code]
 pub enum MurkError {
     #[msg("Signer is not the owner of the token account")]
-    InvalidTokenAccountOwnerError,
+    InvalidTokenAccountOwner,
     #[msg("Signer is not vault creator. Action cannot be performed")]
-    UnauthorizedVaultAccessError,
+    UnauthorizedVaultAccess,
     #[msg("Vault is frozen. Action cannot be performed")]
-    VaultFrozenError,
+    VaultFrozen,
     #[msg("Vault is not frozen. Action cannot be performed")]
-    VaultUnfrozenError,
+    VaultUnfrozen,
     #[msg("Vault is closed. Action cannot be performed")]
-    VaultClosedError,
+    VaultClosed,
     #[msg("Invalid mint authority")]
     InvalidMintAuthority,
     #[msg("Program state already initialized")]
