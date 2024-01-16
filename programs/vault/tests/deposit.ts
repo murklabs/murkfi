@@ -16,6 +16,7 @@ import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 
 const DEPOSIT_AMOUNT = 1000;
+const MAX_DEPOSIT_AMOUNT = 1000000;
 
 describe("murkfi-deposit", () => {
   const provider = anchor.AnchorProvider.env();
@@ -66,6 +67,11 @@ describe("murkfi-deposit", () => {
   it("when creating a vault then vault fields are consistent with signer + payload", async () => {
     // Act
     try {
+      usdcMintAddress = await createSPLToken(
+        provider.connection,
+        wallet,
+        wallet.publicKey
+      );
       const vaultAccount = await program.account.vault.fetch(
         vaultAccountAddress
       );
@@ -74,7 +80,7 @@ describe("murkfi-deposit", () => {
       );
     } catch {
       const txnHash = await program.methods
-        .createVault()
+        .createVault(usdcMintAddress, new BN(MAX_DEPOSIT_AMOUNT))
         .accounts({
           state: stateAddress,
           authority: program.provider.publicKey,
@@ -103,12 +109,6 @@ describe("murkfi-deposit", () => {
   it("when minting USDC to user address then successful ata creation + mint to", async () => {
     try {
       // Act
-      usdcMintAddress = await createSPLToken(
-        provider.connection,
-        wallet,
-        wallet.publicKey
-      );
-
       userUsdcATA = await getOrCreateATA(
         provider.connection,
         wallet,

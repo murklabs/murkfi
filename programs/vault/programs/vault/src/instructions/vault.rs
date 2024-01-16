@@ -142,6 +142,7 @@ pub struct CreateVault<'info> {
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {
+    #[account(mut)]
     pub signer: Signer<'info>,
 
     #[account(mut)]
@@ -210,6 +211,13 @@ impl Deposit<'_> {
         };
 
         let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], program_id);
+        let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
+        let signer = &[&seeds[..]];
+
+        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
+        token::mint_to(cpi_ctx, amount)?;
+        Ok(())
+    }
     fn validate_ata(&self) -> Result<()> {
         if self.user_vault_token_account.to_account_info().data_len() > 0 {
             let ata_data = TokenAccountData::unpack(
@@ -225,15 +233,6 @@ impl Deposit<'_> {
                 MurkError::InvalidTokenAccountOwnerError
             );
         }
-
-        Ok(())
-    }
-    fn mint_tokens_to_user(&self, amount: u64, bump: u8) -> Result<()> {
-        let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
-        let signer = &[&seeds[..]];
-
-        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
-        token::mint_to(cpi_ctx, amount)?;
 
         Ok(())
     }
