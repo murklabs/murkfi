@@ -30,10 +30,7 @@ pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     // 1. Deposit token from user ATA to the vault ATA
     ctx.accounts.deposit_to_vault(amount)?;
 
-    // 2. Create user vToken ATA
-    // TODO: Implement
-
-    // 3. Mint tokens to the user's vault ATA
+    // 2. Mint tokens to the user's vault ATA
     ctx.accounts.mint_vtokens_to_user(ctx.program_id, amount)?;
 
     emit!(VaultDeposit {
@@ -56,7 +53,7 @@ pub fn handle_withdrawal(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     ctx.accounts.withdraw_from_vault(ctx.program_id, amount)?;
 
     // 3. Burn vToken from user vToken ATA
-    ctx.accounts.burn_vtoken_from_user(ctx.program_id, amount)?;
+    ctx.accounts.burn_vtoken_from_user(amount)?;
 
     emit!(VaultWithdrawal {
         amount: amount,
@@ -210,14 +207,18 @@ impl Deposit<'_> {
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
+    #[account(mut)]
     pub signer: Signer<'info>,
 
     #[account(
+        mut,
         constraint = withdrawal_token_account.owner == signer.key(),
     )]
-    #[account(mut)]
     pub withdrawal_token_account: Account<'info, TokenAccount>,
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = user_vault_token_account.owner == signer.key(),
+    )]
     pub user_vault_token_account: Account<'info, TokenAccount>,
 
     pub mint: Account<'info, Mint>,
@@ -239,6 +240,10 @@ impl Withdraw<'_> {
     fn validate_withdrawal(&self) -> Result<()> {
         require!(
             self.withdrawal_token_account.owner == self.signer.key(),
+            MurkError::InvalidTokenAccountOwnerError
+        );
+        require!(
+            self.user_vault_token_account.owner == self.signer.key(),
             MurkError::InvalidTokenAccountOwnerError
         );
         require!(!self.vault.is_frozen, MurkError::VaultFrozenError);
@@ -271,22 +276,20 @@ impl Withdraw<'_> {
 
         Ok(())
     }
-    fn burn_vtoken_from_user(&self, program_id: &Pubkey, amount: u64) -> Result<()> {
-        let cpi_program: AccountInfo<'_> = self.token_program.to_account_info();
+    fn burn_vtoken_from_user(&self, amount: u64) -> Result<()> {
+        let cpi_program = self.token_program.to_account_info();
         let cpi_accounts = Burn {
             mint: self.mint.to_account_info(),
             from: self.user_vault_token_account.to_account_info(),
-            authority: self.mint_authority.to_account_info(),
+            authority: self.signer.to_account_info(),
         };
+        msg!("Mint: {:?}", self.mint.to_account_info());
+        msg!("From: {:?}", self.user_vault_token_account.to_account_info());
+        msg!("Authority: {:?}", self.signer.to_account_info());
 
-        let (_, bump) = Pubkey::find_program_address(&[b"mint_authority"], program_id);
-        let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
-        let signer = &[&seeds[..]];
-
-        let cpi_ctx: CpiContext<'_, '_, '_, '_, Burn<'_>> = CpiContext::new_with_signer(
+        let cpi_ctx = CpiContext::new(
             cpi_program,
             cpi_accounts,
-            signer,
         );
         token::burn(cpi_ctx, amount)?;
 
