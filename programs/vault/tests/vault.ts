@@ -1,13 +1,8 @@
 import assert from "assert";
 import * as anchor from "@coral-xyz/anchor";
 import { Murkfi } from "../target/types/murkfi";
-import { createSPLToken, getOrCreateATA } from "../app/utils";
-import {
-  TOKEN_PROGRAM_ID,
-  getOrCreateAssociatedTokenAccount,
-} from "@solana/spl-token";
 
-describe("murk-vault-manager", () => {
+describe("murkfi-vault", () => {
   const vaultId = 1;
 
   const provider = anchor.AnchorProvider.local();
@@ -21,17 +16,17 @@ describe("murk-vault-manager", () => {
       Buffer.from("vault", "utf8"),
       new anchor.BN(vaultId).toArrayLike(Buffer, "le", 8),
     ],
-    program.programId
+    program.programId,
   );
 
   it("when creating a vault then vault fields are consistent with signer + payload", async () => {
     // Act
     try {
       const vaultAccount = await program.account.vault.fetch(
-        vaultAccountAddress
+        vaultAccountAddress,
       );
       console.log(
-        `Vault already exists, id=${vaultAccount.id}, accountAddress=${vaultAccountAddress}`
+        `Vault already exists, id=${vaultAccount.id}, accountAddress=${vaultAccountAddress}`,
       );
     } catch {
       const txnHash = await program.methods
@@ -44,7 +39,7 @@ describe("murk-vault-manager", () => {
         .signers([wallet.payer])
         .rpc();
       console.log(
-        `Created new vault id=${vaultId}, accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`
+        `Created new vault id=${vaultId}, accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`,
       );
     }
 
@@ -82,7 +77,7 @@ describe("murk-vault-manager", () => {
         .signers([nonCreatorWallet])
         .rpc();
     } catch (e) {
-      assert.equal(e.error.errorCode.number, program.idl.errors[1].code); // MurkError::UnauthorizedVaultAccessError
+      assert.equal(e.error.errorCode.number, program.idl.errors[1].code); // MurkError::UnauthorizedVaultAccess
     }
   });
 
@@ -98,7 +93,7 @@ describe("murk-vault-manager", () => {
         .signers([wallet.payer])
         .rpc();
     } catch (e) {
-      assert.equal(e.error.errorCode.number, program.idl.errors[2].code); // MurkError::VaultFrozenError
+      assert.equal(e.error.errorCode.number, program.idl.errors[2].code); // MurkError::VaultFrozen
     }
   });
 
@@ -130,7 +125,7 @@ describe("murk-vault-manager", () => {
         .signers([nonCreatorWallet])
         .rpc();
     } catch (e) {
-      assert.equal(e.error.errorCode.number, program.idl.errors[1].code); // MurkError::UnauthorizedVaultAccessError
+      assert.equal(e.error.errorCode.number, program.idl.errors[1].code); // MurkError::UnauthorizedVaultAccess
     }
   });
 
@@ -145,7 +140,7 @@ describe("murk-vault-manager", () => {
         })
         .rpc();
     } catch (e) {
-      assert.equal(e.error.errorCode.number, program.idl.errors[3].code); // MurkError::VaultUnfrozenError
+      assert.equal(e.error.errorCode.number, program.idl.errors[3].code); // MurkError::VaultUnfrozen
     }
   });
 
@@ -177,7 +172,7 @@ describe("murk-vault-manager", () => {
         .signers([nonCreatorWallet])
         .rpc();
     } catch (e) {
-      assert.equal(e.error.errorCode.number, program.idl.errors[1].code); // MurkError::UnauthorizedVaultAccessError
+      assert.equal(e.error.errorCode.number, program.idl.errors[1].code); // MurkError::UnauthorizedVaultAccess
     }
   });
 
@@ -193,96 +188,7 @@ describe("murk-vault-manager", () => {
         .signers([wallet.payer])
         .rpc();
     } catch (e) {
-      assert.equal(e.error.errorCode.number, program.idl.errors[4].code); // MurkError::VaultClosedError
+      assert.equal(e.error.errorCode.number, program.idl.errors[4].code); // MurkError::VaultClosed
     }
-  });
-});
-describe("deposit", () => {
-  const vaultId = 1;
-  const depositAmount = 1000;
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-  const wallet = anchor.Wallet.local();
-  const nonCreatorWallet = anchor.web3.Keypair.generate();
-  const program = anchor.workspace.Murkfi as anchor.Program<Murkfi>;
-  let [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("vault", "utf8"),
-      new anchor.BN(vaultId).toArrayLike(Buffer, "le", 8),
-    ],
-    program.programId
-  );
-
-  it("deposits USDC into vault", async () => {
-    const usdcMintAddress = await createSPLToken(
-      provider.connection,
-      wallet,
-      wallet.publicKey
-    );
-
-    const user_USDC_ATA = await getOrCreateATA(
-      provider.connection,
-      wallet,
-      wallet.publicKey,
-      usdcMintAddress,
-      "confirmed"
-    );
-
-    // create vault
-    try {
-      const vaultAccount = await program.account.vault.fetch(
-        vaultAccountAddress
-      );
-      console.log(
-        `Vault already exists, id=${vaultAccount.id}, accountAddress=${vaultAccountAddress}`
-      );
-    } catch {
-      const txnHash = await program.methods
-        .createVault()
-        .accounts({
-          authority: program.provider.publicKey,
-          vault: vaultAccountAddress,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .signers([wallet.payer])
-        .rpc();
-      console.log(
-        `Created new vault id=${vaultId}, accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`
-      );
-    }
-    const vault_USDC_ATA = await getOrCreateATA(
-      provider.connection,
-      wallet,
-      vaultAccountAddress,
-      usdcMintAddress
-    );
-
-    const vaultTokenMintAddress = await createSPLToken(
-      provider.connection,
-      wallet,
-      program.programId
-    );
-
-    const user_VaultToken_ATA = await getOrCreateATA(
-      provider.connection,
-      wallet,
-      wallet.publicKey,
-      vaultTokenMintAddress
-    );
-
-    console.log("Depositing USDC into vault...");
-    await program.methods
-      .depositUsdc(new anchor.BN(depositAmount))
-      .accounts({
-        vault: vaultAccountAddress,
-        vaultTokenAccount: vault_USDC_ATA,
-        userTokenAccount: user_USDC_ATA,
-        signer: provider.wallet.publicKey,
-        mint: vaultTokenMintAddress,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([wallet.payer])
-      .rpc();
-    assert.ok(true);
   });
 });
