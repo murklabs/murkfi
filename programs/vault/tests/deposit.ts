@@ -247,7 +247,6 @@ describe("murkfi-deposit", () => {
       await program.methods
         .withdraw(new BN(DEPOSIT_AMOUNT))
         .accounts({
-          mintAuthority: mintAuthorityPDA,
           mint: vaultTokenMintAddress,
           signer: provider.wallet.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -272,10 +271,6 @@ describe("murkfi-deposit", () => {
         vaultTokenMintAddress,
         wallet.publicKey,
         false,
-      );
-      console.log(
-        "🚀 ~ it ~ userVaultTokenBalanceAfter:",
-        userVaultTokenBalanceAfter,
       );
       assert.equal(userVaultTokenBalanceAfter, 0);
     } catch (e) {

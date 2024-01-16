@@ -221,12 +221,8 @@ pub struct Withdraw<'info> {
     )]
     pub user_vault_token_account: Account<'info, TokenAccount>,
 
+    #[account(mut)]
     pub mint: Account<'info, Mint>,
-    /// CHECK: The `mint_authority` is a PDA derived with known seeds and is used
-    /// as the mint authority for the token. We ensure it matches the derived address
-    /// and is the correct authority for minting tokens.
-    #[account(seeds = [b"mint_authority"], bump)]
-    pub mint_authority: AccountInfo<'info>,
 
     #[account(mut)]
     pub vault: Account<'info, Vault>,
@@ -283,9 +279,6 @@ impl Withdraw<'_> {
             from: self.user_vault_token_account.to_account_info(),
             authority: self.signer.to_account_info(),
         };
-        msg!("Mint: {:?}", self.mint.to_account_info());
-        msg!("From: {:?}", self.user_vault_token_account.to_account_info());
-        msg!("Authority: {:?}", self.signer.to_account_info());
 
         let cpi_ctx = CpiContext::new(
             cpi_program,
