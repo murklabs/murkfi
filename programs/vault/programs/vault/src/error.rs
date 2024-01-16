@@ -20,4 +20,8 @@ pub enum MurkError {
     InvalidMintAuthority,
     #[msg("Program state already initialized")]
     AlreadyInitialized,
+    #[msg("Vault guardian already exists")]
+    VaultGuardianAlreadyExists,
+    #[msg("Vault guardian list is full")]
+    VaultGuardianListFull,
 }

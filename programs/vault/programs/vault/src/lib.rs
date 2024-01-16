@@ -16,8 +16,8 @@ pub mod murkfi {
         handle_initialize_state(ctx)
     }
 
-    pub fn create_vault(ctx: Context<CreateVault>) -> Result<()> {
-        handle_create_vault(ctx)
+    pub fn create_vault(ctx: Context<CreateVault>, asset: Pubkey, max_deposit: u64) -> Result<()> {
+        handle_create_vault(ctx, asset, max_deposit)
     }
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {

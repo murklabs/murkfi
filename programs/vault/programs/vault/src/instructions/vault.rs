@@ -7,7 +7,11 @@ use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer}
 use core::mem::size_of;
 use spl_token::state::Account as TokenAccountData;
 
-pub fn handle_create_vault(ctx: Context<CreateVault>) -> Result<()> {
+pub fn handle_create_vault(
+    ctx: Context<CreateVault>,
+    asset: Pubkey,
+    max_deposit: u64,
+) -> Result<()> {
     let state = &mut ctx.accounts.state;
 
     let vault = &mut ctx.accounts.vault;
@@ -15,6 +19,9 @@ pub fn handle_create_vault(ctx: Context<CreateVault>) -> Result<()> {
     vault.id = state.next_vault_id;
     vault.is_frozen = false;
     vault.is_closed = false;
+    vault.guardians = None;
+    vault.max_deposit = max_deposit;
+    vault.asset = asset;
     state.next_vault_id += 1;
 
     emit!(VaultCreated {

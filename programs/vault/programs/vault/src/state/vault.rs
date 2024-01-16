@@ -1,6 +1,6 @@
+use crate::error::MurkError;
+use crate::state::traits::Admin;
 use anchor_lang::prelude::*;
-
-use crate::state::guardian::Guardian;
 
 #[account]
 #[derive(Default)]
@@ -11,13 +11,63 @@ pub struct Vault {
     pub is_frozen: bool,
     pub is_closed: bool,
     pub max_deposit: u64,
-    pub guardians: [Guardian; 3],
+    pub guardians: Option<[Pubkey; 3]>,
+}
+
+impl Admin for Vault {
+    fn is_admin(&self, pubkey: Pubkey) -> bool {
+        self.creator == pubkey || self.is_guardian(pubkey)
+    }
 }
 
 impl Vault {
     pub fn is_guardian(&self, pubkey: Pubkey) -> bool {
-        self.guardians
-            .iter()
-            .any(|guardian| guardian.pubkey == pubkey)
+        match &self.guardians {
+            Some(guardians) => guardians.iter().any(|guardian| *guardian == pubkey),
+            None => false,
+        }
+    }
+
+    pub fn add_guardian(&mut self, pubkey: Pubkey) -> Result<()> {
+        if !self.is_admin(pubkey) {
+            return Err(MurkError::UnauthorizedVaultAccessError.into());
+        }
+        if self.is_guardian(pubkey) {
+            return Err(MurkError::VaultGuardianAlreadyExists.into());
+        }
+
+        match &mut self.guardians {
+            Some(guardians) => {
+                for guardian in guardians.iter_mut() {
+                    if *guardian == Pubkey::default() {
+                        *guardian = pubkey;
+                        return Ok(());
+                    }
+                }
+                Err(MurkError::VaultGuardianListFull.into())
+            }
+            None => {
+                self.guardians = Some([pubkey, Pubkey::default(), Pubkey::default()]);
+                Ok(())
+            }
+        }
+    }
+
+    pub fn remove_guardian(&mut self, pubkey: Pubkey) -> Result<()> {
+        if !self.is_admin(pubkey) {
+            return Err(MurkError::UnauthorizedVaultAccessError.into());
+        }
+        match &mut self.guardians {
+            Some(guardians) => {
+                for guardian in guardians.iter_mut() {
+                    if *guardian == pubkey {
+                        *guardian = Pubkey::default();
+                        return Ok(());
+                    }
+                }
+                Err(MurkError::VaultGuardianAlreadyExists.into())
+            }
+            None => Err(MurkError::VaultGuardianListFull.into()),
+        }
     }
 }
