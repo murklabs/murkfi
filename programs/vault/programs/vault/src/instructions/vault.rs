@@ -33,7 +33,6 @@ pub fn handle_create_vault(
 }
 
 pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
-    ctx.accounts.validate_ata()?;
     // Validate deposit requirements
     ctx.accounts.validate_deposit()?;
 
@@ -188,6 +187,21 @@ impl Deposit<'_> {
         require!(!self.vault.is_frozen, MurkError::VaultFrozenError);
         require!(!self.vault.is_closed, MurkError::VaultClosedError);
 
+        if self.user_vault_token_account.to_account_info().data_len() > 0 {
+            let ata_data = TokenAccountData::unpack(
+                &self
+                    .user_vault_token_account
+                    .to_account_info()
+                    .data
+                    .borrow(),
+            )?;
+            // Ensure the ATA is for the correct mint
+            require!(
+                ata_data.mint == self.mint.key(),
+                MurkError::InvalidAttachedTokenAccountError
+            );
+        }
+
         Ok(())
     }
     fn deposit_to_vault(&self, amount: u64) -> Result<()> {
@@ -216,24 +230,6 @@ impl Deposit<'_> {
 
         let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
         token::mint_to(cpi_ctx, amount)?;
-        Ok(())
-    }
-    fn validate_ata(&self) -> Result<()> {
-        if self.user_vault_token_account.to_account_info().data_len() > 0 {
-            let ata_data = TokenAccountData::unpack(
-                &self
-                    .user_vault_token_account
-                    .to_account_info()
-                    .data
-                    .borrow(),
-            )?;
-            // Ensure the ATA is for the correct mint
-            require!(
-                ata_data.mint == self.mint.key(),
-                MurkError::InvalidTokenAccountOwnerError
-            );
-        }
-
         Ok(())
     }
 }

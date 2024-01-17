@@ -33,7 +33,7 @@ impl Vault {
             return Err(MurkError::UnauthorizedVaultAccessError.into());
         }
         if self.is_guardian(pubkey) {
-            return Err(MurkError::VaultGuardianAlreadyExists.into());
+            return Err(MurkError::VaultGuardianAlreadyAdded.into());
         }
 
         match &mut self.guardians {
@@ -65,7 +65,7 @@ impl Vault {
                         return Ok(());
                     }
                 }
-                Err(MurkError::VaultGuardianAlreadyExists.into())
+                Err(MurkError::VaultGuardianDoesNotExist.into())
             }
             None => Err(MurkError::VaultGuardianListFull.into()),
         }
