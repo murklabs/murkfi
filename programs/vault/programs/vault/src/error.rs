@@ -26,6 +26,6 @@ pub enum MurkError {
     VaultGuardianAlreadyAdded,
     #[msg("Vault guardian list is full")]
     VaultGuardianListFull,
-    #[msg("Invalid attached token account")]
-    InvalidAttachedTokenAccountError,
+    #[msg("Invalid associated token account")]
+    InvalidAssociatedTokenAccount,
 }

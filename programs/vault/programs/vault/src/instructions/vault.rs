@@ -198,7 +198,7 @@ impl Deposit<'_> {
             // Ensure the ATA is for the correct mint
             require!(
                 ata_data.mint == self.mint.key(),
-                MurkError::InvalidAttachedTokenAccountError
+                MurkError::InvalidAssociatedTokenAccount
             );
         }
 
