@@ -6,11 +6,17 @@ import {
   getOrCreateATA,
   safelyGetAccountBalance,
 } from "../app/utils";
-import { TOKEN_PROGRAM_ID, mintTo } from "@solana/spl-token";
+import {
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  mintTo,
+  getAssociatedTokenAddress,
+} from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 
 const DEPOSIT_AMOUNT = 1000;
+const MAX_DEPOSIT_AMOUNT = 1000000;
 
 describe("murkfi-deposit", () => {
   const provider = anchor.AnchorProvider.env();
@@ -21,15 +27,15 @@ describe("murkfi-deposit", () => {
 
   const [stateAddress] = PublicKey.findProgramAddressSync(
     [Buffer.from("state")],
-    program.programId,
+    program.programId
   );
   const [vaultAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
     [Buffer.from("vault", "utf8"), new BN(1).toArrayLike(Buffer, "le", 8)],
-    program.programId,
+    program.programId
   );
   const [mintAuthorityPDA] = PublicKey.findProgramAddressSync(
     [Buffer.from("mint_authority")],
-    program.programId,
+    program.programId
   );
 
   let usdcMintAddress: PublicKey | null = null;
@@ -61,15 +67,20 @@ describe("murkfi-deposit", () => {
   it("when creating a vault then vault fields are consistent with signer + payload", async () => {
     // Act
     try {
+      usdcMintAddress = await createSPLToken(
+        provider.connection,
+        wallet,
+        wallet.publicKey
+      );
       const vaultAccount = await program.account.vault.fetch(
-        vaultAccountAddress,
+        vaultAccountAddress
       );
       console.log(
-        `Vault already exists, id=${vaultAccount.id}, accountAddress=${vaultAccountAddress}`,
+        `Vault already exists, id=${vaultAccount.id}, accountAddress=${vaultAccountAddress}`
       );
     } catch {
       const txnHash = await program.methods
-        .createVault()
+        .createVault(usdcMintAddress, new BN(MAX_DEPOSIT_AMOUNT))
         .accounts({
           state: stateAddress,
           authority: program.provider.publicKey,
@@ -79,14 +90,14 @@ describe("murkfi-deposit", () => {
         .signers([wallet.payer])
         .rpc();
       console.log(
-        `Created new vault accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`,
+        `Created new vault accountAddress=${vaultAccountAddress}, txnHash=${txnHash}`
       );
     }
 
     // Assert
     try {
       const vaultAccount = await program.account.vault.fetch(
-        vaultAccountAddress,
+        vaultAccountAddress
       );
       assert.equal(vaultAccount.creator, wallet.publicKey.toBase58());
       assert.equal(vaultAccount.id, 1);
@@ -98,17 +109,11 @@ describe("murkfi-deposit", () => {
   it("when minting USDC to user address then successful ata creation + mint to", async () => {
     try {
       // Act
-      usdcMintAddress = await createSPLToken(
-        provider.connection,
-        wallet,
-        wallet.publicKey,
-      );
-
       userUsdcATA = await getOrCreateATA(
         provider.connection,
         wallet,
         wallet.publicKey,
-        usdcMintAddress,
+        usdcMintAddress
       );
 
       await mintTo(
@@ -117,7 +122,7 @@ describe("murkfi-deposit", () => {
         usdcMintAddress,
         userUsdcATA,
         wallet.publicKey,
-        DEPOSIT_AMOUNT,
+        DEPOSIT_AMOUNT
       );
 
       // Assert
@@ -125,7 +130,7 @@ describe("murkfi-deposit", () => {
         provider.connection,
         usdcMintAddress,
         wallet.publicKey,
-        true,
+        true
       );
 
       assert.ok(userUsdcAccountBalance);
@@ -141,7 +146,7 @@ describe("murkfi-deposit", () => {
         provider.connection,
         wallet,
         vaultAccountAddress,
-        usdcMintAddress,
+        usdcMintAddress
       );
       assert.ok(vaultUsdcATA);
 
@@ -149,31 +154,21 @@ describe("murkfi-deposit", () => {
         provider.connection,
         usdcMintAddress,
         vaultAccountAddress,
-        true, // PDA is off-curve
+        true // PDA is off-curve
       );
       assert.equal(vaultUsdcBalanceBefore, 0);
 
       vaultTokenMintAddress = await createSPLToken(
         provider.connection,
         wallet,
-        mintAuthorityPDA,
+        mintAuthorityPDA
       );
-
-      const userVaultTokenATA = await getOrCreateATA(
-        provider.connection,
-        wallet,
-        wallet.publicKey,
-        vaultTokenMintAddress,
-      );
-      assert.ok(userVaultTokenATA);
-
-      const userVaultTokenBalanceBefore = await safelyGetAccountBalance(
-        provider.connection,
+      // user does not have it yet but pass it in so the program can check and create.
+      const userVaultTokenATA = await getAssociatedTokenAddress(
         vaultTokenMintAddress,
         wallet.publicKey,
-        false,
+        true
       );
-      assert.equal(userVaultTokenBalanceBefore, 0);
 
       await program.methods
         .deposit(new BN(DEPOSIT_AMOUNT))
@@ -186,6 +181,8 @@ describe("murkfi-deposit", () => {
           userVaultTokenAccount: userVaultTokenATA,
           mintAuthority: mintAuthorityPDA,
           tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         })
         .signers([wallet.payer])
         .rpc();
@@ -194,7 +191,7 @@ describe("murkfi-deposit", () => {
         provider.connection,
         usdcMintAddress,
         vaultAccountAddress,
-        true, // PDA is off-curve
+        true // PDA is off-curve
       );
       assert.equal(vaultUsdcBalanceAfter * 1000000, DEPOSIT_AMOUNT);
 
@@ -202,7 +199,7 @@ describe("murkfi-deposit", () => {
         provider.connection,
         vaultTokenMintAddress,
         wallet.publicKey,
-        false,
+        false
       );
       assert.equal(userVaultTokenBalanceAfter * 1000000, DEPOSIT_AMOUNT);
     } catch (e) {
@@ -216,7 +213,7 @@ describe("murkfi-deposit", () => {
         provider.connection,
         wallet,
         vaultAccountAddress,
-        usdcMintAddress,
+        usdcMintAddress
       );
       assert.ok(vaultUsdcATA);
 
@@ -224,7 +221,7 @@ describe("murkfi-deposit", () => {
         provider.connection,
         usdcMintAddress,
         vaultAccountAddress,
-        true, // PDA is off-curve
+        true // PDA is off-curve
       );
       assert.equal(vaultUsdcBalanceBefore * 1000000, DEPOSIT_AMOUNT);
 
@@ -232,7 +229,7 @@ describe("murkfi-deposit", () => {
         provider.connection,
         wallet,
         wallet.publicKey,
-        vaultTokenMintAddress,
+        vaultTokenMintAddress
       );
       assert.ok(userVaultTokenATA);
 
@@ -240,7 +237,7 @@ describe("murkfi-deposit", () => {
         provider.connection,
         vaultTokenMintAddress,
         wallet.publicKey,
-        false,
+        false
       );
       assert.equal(userVaultTokenBalanceBefore * 1000000, DEPOSIT_AMOUNT);
 
@@ -262,7 +259,7 @@ describe("murkfi-deposit", () => {
         provider.connection,
         usdcMintAddress,
         vaultAccountAddress,
-        true, // PDA is off-curve
+        true // PDA is off-curve
       );
       assert.equal(vaultUsdcBalanceAfter, 0);
 
@@ -270,7 +267,7 @@ describe("murkfi-deposit", () => {
         provider.connection,
         vaultTokenMintAddress,
         wallet.publicKey,
-        false,
+        false
       );
       assert.equal(userVaultTokenBalanceAfter, 0);
     } catch (e) {
