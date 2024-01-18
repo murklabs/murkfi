@@ -1,17 +1,26 @@
 use crate::error::MurkError;
 use crate::state::events::*;
 use crate::state::{state::State, vault::Vault};
-use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount, Transfer, Burn};
+use anchor_lang::{prelude::*, solana_program::program_pack::Pack};
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
 use core::mem::size_of;
+use spl_token::state::Account as TokenAccountData;
 
-pub fn handle_create_vault(ctx: Context<CreateVault>) -> Result<()> {
+pub fn handle_create_vault(
+    ctx: Context<CreateVault>,
+    asset: Pubkey,
+    max_deposit: u64,
+) -> Result<()> {
     let state = &mut ctx.accounts.state;
     let vault = &mut ctx.accounts.vault;
     vault.creator = *ctx.accounts.authority.key;
     vault.id = state.next_vault_id;
     vault.is_frozen = false;
     vault.is_closed = false;
+    vault.guardians = None;
+    vault.max_deposit = max_deposit;
+    vault.asset = asset;
     state.next_vault_id += 1;
 
     emit!(VaultCreated {
@@ -128,20 +137,27 @@ pub struct CreateVault<'info> {
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {
+    #[account(mut)]
     pub signer: Signer<'info>,
 
     #[account(mut)]
     pub vault: Account<'info, Vault>,
+
+    // This is the vault's ATA for the token they are depositing
     #[account(mut)]
     pub vault_token_account: Account<'info, TokenAccount>,
 
-    #[account(
-        constraint = user_token_account.owner == signer.key(),
+    // This is the user's ATA for the token they are depositing
+    #[account(mut, constraint = user_token_account.owner == signer.key(),
     )]
-    #[account(mut)]
     pub user_token_account: Account<'info, TokenAccount>,
 
-    #[account(mut)]
+    #[account(
+        init_if_needed,
+        payer = signer,
+        associated_token::mint = mint,
+        associated_token::authority = signer
+    )]
     pub user_vault_token_account: Account<'info, TokenAccount>,
 
     #[account(mut)]
@@ -152,7 +168,10 @@ pub struct Deposit<'info> {
     #[account(seeds = [b"mint_authority"], bump)]
     pub mint_authority: AccountInfo<'info>,
 
+    // this is needed to create the associated token account if not already created
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
 }
 
 impl Deposit<'_> {
@@ -163,6 +182,21 @@ impl Deposit<'_> {
         );
         require!(!self.vault.is_frozen, MurkError::VaultFrozen);
         require!(!self.vault.is_closed, MurkError::VaultClosed);
+
+        if self.user_vault_token_account.to_account_info().data_len() > 0 {
+            let ata_data = TokenAccountData::unpack(
+                &self
+                    .user_vault_token_account
+                    .to_account_info()
+                    .data
+                    .borrow(),
+            )?;
+            // Ensure the ATA is for the correct mint
+            require!(
+                ata_data.mint == self.mint.key(),
+                MurkError::InvalidAssociatedTokenAccount
+            );
+        }
 
         Ok(())
     }
@@ -190,13 +224,8 @@ impl Deposit<'_> {
         let seeds: &[&[u8]; 2] = &[b"mint_authority", &[bump][..]];
         let signer = &[&seeds[..]];
 
-        let cpi_ctx = CpiContext::new_with_signer(
-            cpi_program,
-            cpi_accounts,
-            signer,
-        );
+        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
         token::mint_to(cpi_ctx, amount)?;
-
         Ok(())
     }
 }
@@ -252,18 +281,12 @@ impl Withdraw<'_> {
         };
 
         let vault_id_bytes: [u8; 8] = self.vault.id.to_le_bytes();
-        let (_, bump) = Pubkey::find_program_address(
-            &[b"vault", vault_id_bytes.as_ref()],
-            program_id,
-        );
+        let (_, bump) =
+            Pubkey::find_program_address(&[b"vault", vault_id_bytes.as_ref()], program_id);
         let seeds: &[&[u8]; 3] = &[b"vault", vault_id_bytes.as_ref(), &[bump][..]];
         let signer = &[&seeds[..]];
 
-        let cpi_ctx = CpiContext::new_with_signer(
-            cpi_program,
-            cpi_accounts,
-            signer,
-        );
+        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
         token::transfer(cpi_ctx, amount)?;
 
         Ok(())
@@ -276,10 +299,7 @@ impl Withdraw<'_> {
             authority: self.signer.to_account_info(),
         };
 
-        let cpi_ctx = CpiContext::new(
-            cpi_program,
-            cpi_accounts,
-        );
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
         token::burn(cpi_ctx, amount)?;
 
         Ok(())
