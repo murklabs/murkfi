@@ -1,6 +1,6 @@
 use crate::error::MurkError;
 use crate::state::events::*;
-use crate::state::{state::State, vault::Vault};
+use crate::state::{state::State, user::UserDeposit, vault::Vault};
 use anchor_lang::{prelude::*, solana_program::program_pack::Pack};
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
@@ -167,6 +167,14 @@ pub struct Deposit<'info> {
     /// and is the correct authority for minting tokens.
     #[account(seeds = [b"mint_authority"], bump)]
     pub mint_authority: AccountInfo<'info>,
+    #[account(
+        init_if_needed,
+        seeds = [b"user_deposit", signer.key().as_ref(), vault.id.to_le_bytes().as_ref()],
+        bump,
+        payer = signer,
+        space = 8 + size_of::<UserDeposit>(),
+    )]
+    pub user_deposit: Account<'info, UserDeposit>,
 
     // this is needed to create the associated token account if not already created
     pub associated_token_program: Program<'info, AssociatedToken>,
