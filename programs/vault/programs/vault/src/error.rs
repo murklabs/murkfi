@@ -28,4 +28,6 @@ pub enum MurkError {
     VaultGuardianListFull,
     #[msg("Invalid associated token account")]
     InvalidAssociatedTokenAccount,
+    #[msg("Max number of withdrawal requests reached")]
+    WithdrawalRequestLimitReached,
 }
