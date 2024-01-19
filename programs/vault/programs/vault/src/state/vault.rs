@@ -30,7 +30,7 @@ impl Vault {
 
     pub fn add_guardian(&mut self, pubkey: Pubkey) -> Result<()> {
         if !self.is_admin(pubkey) {
-            return Err(MurkError::UnauthorizedVaultAccessError.into());
+            return Err(MurkError::UnauthorizedVaultAccess.into());
         }
         if self.is_guardian(pubkey) {
             return Err(MurkError::VaultGuardianAlreadyAdded.into());
@@ -55,7 +55,7 @@ impl Vault {
 
     pub fn remove_guardian(&mut self, pubkey: Pubkey) -> Result<()> {
         if !self.is_admin(pubkey) {
-            return Err(MurkError::UnauthorizedVaultAccessError.into());
+            return Err(MurkError::UnauthorizedVaultAccess.into());
         }
         match &mut self.guardians {
             Some(guardians) => {
