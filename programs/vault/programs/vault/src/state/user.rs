@@ -2,18 +2,18 @@ use anchor_lang::prelude::*;
 
 use crate::error::MurkError;
 
+pub const MAX_WITHDRAWAL_REQUESTS: usize = 10;
+
 #[account]
 pub struct UserDeposit {
     pub initialized: bool,
     pub vault: Pubkey,
     pub amount: u64,
-    pub withdrawals: [WithdrawalRequest; UserDeposit::MAX_WITHDRAWAL_REQUESTS],
+    pub withdrawals: [WithdrawalRequest; MAX_WITHDRAWAL_REQUESTS],
     pub bump: u8,
 }
 
 impl UserDeposit {
-    const MAX_WITHDRAWAL_REQUESTS: usize = 10;
-
     pub fn new(&mut self, vault: Pubkey, amount: u64, bump: u8) {
         self.initialized = true;
         self.vault = vault;
@@ -22,7 +22,7 @@ impl UserDeposit {
             amount: 0,
             initiated_timestamp: 0,
             status: WithdrawalStatus::None,
-        }; UserDeposit::MAX_WITHDRAWAL_REQUESTS];
+        }; MAX_WITHDRAWAL_REQUESTS];
         self.bump = bump;
     }
 
