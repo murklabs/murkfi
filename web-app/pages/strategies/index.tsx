@@ -171,7 +171,7 @@ const Vault0Hero = () => {
           <div className="space-y-2">
             <div className="flex justify-center">
               <div className="text-9xl font-extrabold tracking-tighter">
-                <span>VAULTS</span>
+                <span>STRATEGY</span>
               </div>
               <div className="mt-4 block text-4xl">
                 <span>V</span>
@@ -180,7 +180,7 @@ const Vault0Hero = () => {
             </div>
 
             <p className="mx-auto max-w-[700px] text-gray-500 dark:text-gray-400 md:text-xl">
-              The V0 Vault is the first incantation of the Murk Protocol market making strategy. It is set on a fixed
+              The V0 Strategy is the first incantation of the Murk Protocol market making strategy. It is set on a fixed
               asset, spread and profit factor. More vaults will be added soon.
             </p>
           </div>
@@ -195,7 +195,7 @@ const Vault0ComingSoon = () => {
     <Card>
       <CardHeader>
         <Flex justifyContent="space-between">
-          <Heading size="md">Vault V0: Grid Market Maker</Heading>
+          <Heading size="md">Strategy V0: Grid Market Maker</Heading>
           <Badge>Unavailable</Badge>
         </Flex>
       </CardHeader>

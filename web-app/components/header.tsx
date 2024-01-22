@@ -13,8 +13,8 @@ const MenuItems = [
     href: "/",
   },
   {
-    text: "Vaults",
-    href: "/vaults",
+    text: "Strategies",
+    href: "/strategies",
   },
   {
     text: "About",

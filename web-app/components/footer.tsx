@@ -1,53 +1,114 @@
-import Link from "next/link"
-import { siteConfig } from "@/config/site"
+import {
+  Box,
+  chakra,
+  Container,
+  Heading,
+  IconButton,
+  Input,
+  Link,
+  SimpleGrid,
+  Stack,
+  Text,
+  useColorModeValue,
+  VisuallyHidden,
+} from "@chakra-ui/react"
+import { ReactNode } from "react"
+import { BiMailSend } from "react-icons/bi"
+import { FaDiscord, FaMedium, FaTwitter } from "react-icons/fa"
 
-export default function Footer() {
+const SocialButton = ({ children, label, href }: { children: ReactNode; label: string; href: string }) => {
   return (
-    <footer>
-      <div className="container mx-auto w-full p-4 md:py-8">
-        <div className="sm:flex sm:items-center sm:justify-between">
-          <a href="/" className="mb-4 flex items-center sm:mb-0">
-            <span className="self-center whitespace-nowrap text-2xl font-semibold">{siteConfig.name}</span>
-          </a>
-          <ul className="mb-6 flex flex-wrap items-center text-sm font-medium text-gray-500 sm:mb-0">
-            <li>
-              <Link href="/" className="mr-4 hover:underline md:mr-6 ">
-                Home
-              </Link>
-            </li>
-            <li>
-              <Link href="/vaults" className="mr-4 hover:underline md:mr-6 ">
-                Vaults
-              </Link>
-            </li>
-            <li>
-              <Link href="/about" className="mr-4 hover:underline md:mr-6 ">
-                About
-              </Link>
-            </li>
-            {/* TODO: Privacy Policy */}
-            {/* <li>
-              <a href="#" className="mr-4 hover:underline md:mr-6">
-                Privacy Policy
-              </a>
-            </li> */}
-            {/* TODO: Contact us */}
-            <li>
-              <a href="#" className="hover:underline">
-                Contact
-              </a>
-            </li>
-          </ul>
-        </div>
-        <hr className="my-6 border-gray-200 sm:mx-auto lg:my-8" />
-        <span className="block text-sm text-gray-500 sm:text-center">
-          © 2023{" "}
-          <Link href="/" className="hover:underline">
-            {siteConfig.name}
-          </Link>
-          . All Rights Reserved.
-        </span>
-      </div>
-    </footer>
+    <chakra.button
+      bg={useColorModeValue("blackAlpha.100", "whiteAlpha.100")}
+      rounded={"full"}
+      w={8}
+      h={8}
+      cursor={"pointer"}
+      as={"a"}
+      href={href}
+      display={"inline-flex"}
+      alignItems={"center"}
+      justifyContent={"center"}
+      transition={"background 0.3s ease"}
+      _hover={{
+        bg: useColorModeValue("blackAlpha.200", "whiteAlpha.200"),
+      }}
+    >
+      <VisuallyHidden>{label}</VisuallyHidden>
+      {children}
+    </chakra.button>
+  )
+}
+
+const ListHeader = ({ children }: { children: ReactNode }) => {
+  return (
+    <Text fontWeight={"500"} fontSize={"lg"} mb={2}>
+      {children}
+    </Text>
+  )
+}
+
+export function Footer() {
+  return (
+    <Box bg={useColorModeValue("gray.50", "gray.900")} color={useColorModeValue("gray.700", "gray.200")}>
+      <Container as={Stack} maxW={"6xl"} py={10}>
+        <SimpleGrid templateColumns={{ sm: "1fr 1fr", md: "2fr 1fr 1fr 2fr" }} spacing={8}>
+          <Stack spacing={6}>
+            <Box>
+              <Heading color="black" size="lg" letterSpacing={2}>
+                <Link style={{ textDecoration: "none" }} href="/">
+                  Murk Protocol
+                </Link>
+              </Heading>
+            </Box>
+            <Text fontSize={"sm"}>© 2023 Murk Protocol. All rights reserved</Text>
+            <Stack direction={"row"} spacing={6}>
+              <SocialButton label={"Twitter"} href={"#"}>
+                <FaTwitter />
+              </SocialButton>
+              <SocialButton label={"Discord"} href={"#"}>
+                <FaDiscord />
+              </SocialButton>
+              <SocialButton label={"Medium"} href={"#"}>
+                <FaMedium />
+              </SocialButton>
+            </Stack>
+          </Stack>
+          <Stack align={"flex-start"}>
+            <ListHeader>Company</ListHeader>
+            <Link href={"/about"}>About</Link>
+            <Link href={"#"}>Contact</Link>
+          </Stack>
+          <Stack align={"flex-start"}>
+            <ListHeader>Support</ListHeader>
+            <Link href={"#"}>Terms of Service</Link>
+            <Link href={"#"}>Legal</Link>
+            <Link href={"#"}>Privacy Policy</Link>
+          </Stack>
+          <Stack align={"flex-start"}>
+            <ListHeader>Get In Contact</ListHeader>
+            <Stack direction={"row"}>
+              <Input
+                placeholder={"Your email address"}
+                bg={useColorModeValue("blackAlpha.100", "whiteAlpha.100")}
+                border={0}
+                _focus={{
+                  bg: "whiteAlpha.300",
+                }}
+              />
+              <IconButton
+                bg={useColorModeValue("blue.400", "blue.800")}
+                color={useColorModeValue("white", "gray.800")}
+                _hover={{
+                  bg: "blue.600",
+                }}
+                aria-label="Subscribe"
+                icon={<BiMailSend />}
+              />
+            </Stack>
+          </Stack>
+        </SimpleGrid>
+      </Container>
+    </Box>
   )
 }
