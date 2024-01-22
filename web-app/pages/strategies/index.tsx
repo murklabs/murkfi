@@ -74,7 +74,7 @@ export default function VaultPage() {
         <Card>
           <CardHeader>
             <Flex justifyContent="space-between">
-              <Heading size="md">Vault V0: Delta Neutral Market Maker</Heading>
+              <Heading size="md">Strategy V0: Delta Neutral Market Maker</Heading>
               <Badge colorScheme="green">New</Badge>
             </Flex>
           </CardHeader>
