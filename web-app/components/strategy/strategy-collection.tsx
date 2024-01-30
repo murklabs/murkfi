@@ -17,6 +17,7 @@ import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana
 import { useState } from "react"
 import { Typography } from "@/components/ui/typography"
 import useSolanaBalance from "@/utils/hooks/useSolanaBalance"
+import { Strategy } from "./strategy"
 
 const vault0ReceiverAddress = "MURkx3GDZYpk9ibdB6xpRjD1aJRXpfvRE8yfVZ7NAg9" // Murk hot wallet #1
 type ResultStatus = "idle" | "success" | "failed"
@@ -34,5 +35,19 @@ export const StrategyCollection = () => {
   const { connection } = useConnection()
   const solanaBalance = useSolanaBalance(publicKey)
   const vault0SolanaBalance = useSolanaBalance(new PublicKey(vault0ReceiverAddress))
-  return <div></div>
+  const strats = [0, 1, 2, 3, 4, 5, 6, 7]
+  return (
+    <div>
+      {strats.map((s) => (
+        <div key={s}>
+          <Strategy
+            market={"Zeta Markets"}
+            name={"Strategy V0: Delta Neutral Market Maker"}
+            vaultBalance={}
+            vaultMax={}
+          />
+        </div>
+      ))}
+    </div>
+  )
 }

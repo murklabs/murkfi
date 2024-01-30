@@ -9,12 +9,15 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  Toast,
   useColorModeValue,
+  useToast,
   VisuallyHidden,
 } from "@chakra-ui/react"
-import { ReactNode } from "react"
+import { ReactNode, useState } from "react"
 import { BiMailSend } from "react-icons/bi"
 import { FaDiscord, FaMedium, FaTwitter } from "react-icons/fa"
+import { emailSubscribe } from "@/utils/utils"
 
 const SocialButton = ({ children, label, href }: { children: ReactNode; label: string; href: string }) => {
   return (
@@ -49,6 +52,11 @@ const ListHeader = ({ children }: { children: ReactNode }) => {
 }
 
 export function Footer() {
+  const [email, setEmail] = useState("")
+  const toast = useToast()
+  const handleSubscribe = () => {
+    emailSubscribe(email, setEmail, toast)
+  }
   return (
     <Box bg={useColorModeValue("gray.50", "gray.900")} color={useColorModeValue("gray.700", "gray.200")}>
       <Container as={Stack} maxW={"6xl"} py={10}>
@@ -86,7 +94,7 @@ export function Footer() {
             <Link href={"#"}>Privacy Policy</Link>
           </Stack>
           <Stack align={"flex-start"}>
-            <ListHeader>Get In Contact</ListHeader>
+            <ListHeader>Get Updated</ListHeader>
             <Stack direction={"row"}>
               <Input
                 placeholder={"Your email address"}
@@ -95,6 +103,8 @@ export function Footer() {
                 _focus={{
                   bg: "whiteAlpha.300",
                 }}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
               <IconButton
                 bg={useColorModeValue("blue.400", "blue.800")}
@@ -104,6 +114,7 @@ export function Footer() {
                 }}
                 aria-label="Subscribe"
                 icon={<BiMailSend />}
+                onClick={handleSubscribe}
               />
             </Stack>
           </Stack>
