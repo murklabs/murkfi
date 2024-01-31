@@ -2,10 +2,10 @@ import { MenuIcon } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import ConnectWalletButton from "@/components/connect-wallet-button"
-import { siteConfig } from "@/config/site"
 import { cn } from "@/utils/cn"
 import { IconButton } from "./ui/icon-button"
 import { Typography } from "./ui/typography"
+import { Image } from "@chakra-ui/react"
 
 const MenuItems = [
   {
@@ -14,12 +14,12 @@ const MenuItems = [
   },
   {
     text: "Strategies",
-    href: "/strategies",
+    href: "/coming-soon",
   },
-  {
-    text: "About",
-    href: "/about",
-  },
+  // {
+  //   text: "About",
+  //   href: "/about",
+  // },
 ]
 
 export default function Header() {
@@ -30,7 +30,7 @@ export default function Header() {
       <div className="container mx-auto flex items-center p-4 md:px-6">
         <a href="/" className="flex items-center">
           <Typography as="span" level="h6" className="hidden whitespace-nowrap font-semibold md:inline-block">
-            {siteConfig.name}
+            <Image src="assets/murk-logo.png" alt="murk" width={150} height={30} />
           </Typography>
         </a>
 

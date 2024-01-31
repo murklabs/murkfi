@@ -2,14 +2,13 @@ import {
   Box,
   chakra,
   Container,
-  Heading,
   IconButton,
   Input,
   Link,
   SimpleGrid,
   Stack,
   Text,
-  Toast,
+  Image,
   useColorModeValue,
   useToast,
   VisuallyHidden,
@@ -63,11 +62,9 @@ export function Footer() {
         <SimpleGrid templateColumns={{ sm: "1fr 1fr", md: "2fr 1fr 1fr 2fr" }} spacing={8}>
           <Stack spacing={6}>
             <Box>
-              <Heading color="black" size="lg" letterSpacing={2}>
-                <Link style={{ textDecoration: "none" }} href="/">
-                  Murk Protocol
-                </Link>
-              </Heading>
+              <Link style={{ textDecoration: "none" }} href="/">
+                <Image src="assets/murk-logo.png" alt="murk" width={150} height={30} m="initial" />
+              </Link>
             </Box>
             <Text fontSize={"sm"}>© 2023 Murk Protocol. All rights reserved</Text>
             <Stack direction={"row"} spacing={6}>
@@ -94,7 +91,7 @@ export function Footer() {
             <Link href={"#"}>Privacy Policy</Link>
           </Stack>
           <Stack align={"flex-start"}>
-            <ListHeader>Get Updated</ListHeader>
+            <ListHeader>Stay Updated</ListHeader>
             <Stack direction={"row"}>
               <Input
                 placeholder={"Your email address"}
