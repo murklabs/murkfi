@@ -1,6 +1,6 @@
 use crate::error::MurkError;
 use crate::state::events::*;
-use crate::state::{state::State, vault::Vault};
+use crate::state::{state::State, user::UserDeposit, vault::Vault};
 use anchor_lang::{prelude::*, solana_program::program_pack::Pack};
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
@@ -14,14 +14,15 @@ pub fn handle_create_vault(
 ) -> Result<()> {
     let state = &mut ctx.accounts.state;
     let vault = &mut ctx.accounts.vault;
-    vault.creator = *ctx.accounts.authority.key;
-    vault.id = state.next_vault_id;
-    vault.is_frozen = false;
-    vault.is_closed = false;
-    vault.guardians = None;
-    vault.max_deposit = max_deposit;
-    vault.asset = asset;
-    state.next_vault_id += 1;
+    let bump = vault.bump;
+    vault.new(
+        *ctx.accounts.authority.key,
+        state.next_vault_id,
+        asset,
+        max_deposit,
+        bump,
+    );
+    state.increase_vault_count();
 
     emit!(VaultCreated {
         creator: vault.creator,
@@ -37,6 +38,9 @@ pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
 
     // Deposit token from user ATA to the vault ATA
     ctx.accounts.deposit_to_vault(amount)?;
+
+    // Update/Create user deposit account
+    ctx.accounts.update_user_deposit(amount)?;
 
     // Mint tokens to the user's vault ATA
     ctx.accounts.mint_vtokens_to_user(ctx.program_id, amount)?;
@@ -71,7 +75,8 @@ pub fn handle_withdrawal(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
 
 pub fn handle_freeze_vault(ctx: Context<FreezeVault>) -> Result<()> {
     require_keys_eq!(
-        ctx.accounts.vault.creator, ctx.accounts.signer.key(),
+        ctx.accounts.vault.creator,
+        ctx.accounts.signer.key(),
         MurkError::UnauthorizedVaultAccess
     );
     require!(!ctx.accounts.vault.is_frozen, MurkError::VaultFrozen);
@@ -86,7 +91,8 @@ pub fn handle_freeze_vault(ctx: Context<FreezeVault>) -> Result<()> {
 
 pub fn handle_unfreeze_vault(ctx: Context<UnfreezeVault>) -> Result<()> {
     require_keys_eq!(
-        ctx.accounts.vault.creator, ctx.accounts.signer.key(),
+        ctx.accounts.vault.creator,
+        ctx.accounts.signer.key(),
         MurkError::UnauthorizedVaultAccess
     );
     require!(ctx.accounts.vault.is_frozen, MurkError::VaultUnfrozen);
@@ -102,7 +108,8 @@ pub fn handle_unfreeze_vault(ctx: Context<UnfreezeVault>) -> Result<()> {
 // This is an irreversible action and vault will be permanently closed
 pub fn handle_close_vault(ctx: Context<CloseVault>) -> Result<()> {
     require_keys_eq!(
-        ctx.accounts.vault.creator, ctx.accounts.signer.key(),
+        ctx.accounts.vault.creator,
+        ctx.accounts.signer.key(),
         MurkError::UnauthorizedVaultAccess
     );
     require!(!ctx.accounts.vault.is_closed, MurkError::VaultClosed);
@@ -167,6 +174,14 @@ pub struct Deposit<'info> {
     /// and is the correct authority for minting tokens.
     #[account(seeds = [b"mint_authority"], bump)]
     pub mint_authority: AccountInfo<'info>,
+    #[account(
+        init_if_needed,
+        seeds = [b"user_deposit", signer.key().as_ref(), vault.id.to_le_bytes().as_ref()],
+        bump,
+        payer = signer,
+        space = 8 + size_of::<UserDeposit>(),
+    )]
+    pub user_deposit: Account<'info, UserDeposit>,
 
     // this is needed to create the associated token account if not already created
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -177,7 +192,8 @@ pub struct Deposit<'info> {
 impl Deposit<'_> {
     fn validate_deposit(&self) -> Result<()> {
         require_keys_eq!(
-            self.user_token_account.owner, self.signer.key(),
+            self.user_token_account.owner,
+            self.signer.key(),
             MurkError::InvalidTokenAccountOwner
         );
         require!(!self.vault.is_frozen, MurkError::VaultFrozen);
@@ -209,6 +225,18 @@ impl Deposit<'_> {
         };
         let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
         token::transfer(cpi_ctx, amount)?;
+
+        Ok(())
+    }
+    fn update_user_deposit(&mut self, amount: u64) -> Result<()> {
+        let bump = self.user_deposit.bump;
+        let user_deposit = &mut self.user_deposit;
+        if user_deposit.initialized {
+            user_deposit.add_amount(amount);
+        } else {
+            // if a user deposit account doesn't exist, create one
+            user_deposit.new(*self.vault.to_account_info().key, amount, bump);
+        }
 
         Ok(())
     }
@@ -260,11 +288,13 @@ pub struct Withdraw<'info> {
 impl Withdraw<'_> {
     fn validate_withdrawal(&self) -> Result<()> {
         require_keys_eq!(
-            self.withdrawal_token_account.owner, self.signer.key(),
+            self.withdrawal_token_account.owner,
+            self.signer.key(),
             MurkError::InvalidTokenAccountOwner
         );
         require_keys_eq!(
-            self.user_vault_token_account.owner, self.signer.key(),
+            self.user_vault_token_account.owner,
+            self.signer.key(),
             MurkError::InvalidTokenAccountOwner
         );
         require!(!self.vault.is_frozen, MurkError::VaultFrozen);

@@ -12,6 +12,7 @@ pub struct Vault {
     pub is_closed: bool,
     pub max_deposit: u64,
     pub guardians: Option<[Pubkey; 3]>,
+    pub bump: u8,
 }
 
 impl Admin for Vault {
@@ -21,6 +22,17 @@ impl Admin for Vault {
 }
 
 impl Vault {
+    pub fn new(&mut self, creator: Pubkey, id: u64, asset: Pubkey, max_deposit: u64, bump: u8) {
+        self.creator = creator;
+        self.id = id;
+        self.asset = asset;
+        self.is_frozen = false;
+        self.is_closed = false;
+        self.max_deposit = max_deposit;
+        self.guardians = Some([Pubkey::default(), Pubkey::default(), Pubkey::default()]);
+        self.bump = bump;
+    }
+
     pub fn is_guardian(&self, pubkey: Pubkey) -> bool {
         match &self.guardians {
             Some(guardians) => guardians.iter().any(|guardian| *guardian == pubkey),

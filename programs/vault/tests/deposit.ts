@@ -170,6 +170,15 @@ describe("murkfi-deposit", () => {
         true
       );
 
+      const [userDepositAddress] = anchor.web3.PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("user_deposit", "utf8"),
+          wallet.publicKey.toBuffer(),
+          new BN(1).toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId
+      );
+
       await program.methods
         .deposit(new BN(DEPOSIT_AMOUNT))
         .accounts({
@@ -180,6 +189,7 @@ describe("murkfi-deposit", () => {
           mint: vaultTokenMintAddress,
           userVaultTokenAccount: userVaultTokenATA,
           mintAuthority: mintAuthorityPDA,
+          userDeposit: userDepositAddress,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: anchor.web3.SystemProgram.programId,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
