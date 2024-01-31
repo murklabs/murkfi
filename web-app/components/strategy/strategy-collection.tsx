@@ -43,8 +43,8 @@ export const StrategyCollection = () => {
           <Strategy
             market={"Zeta Markets"}
             name={"Strategy V0: Delta Neutral Market Maker"}
-            vaultBalance={}
-            vaultMax={}
+            vaultBalance={1}
+            vaultMax={1}
           />
         </div>
       ))}

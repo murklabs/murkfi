@@ -17,7 +17,7 @@ const ComingSoon = () => {
         Coming Soon
       </Heading>
       <Text fontSize="lg" mb={8}>
-        We're currently building this out. Stay tuned!
+        We are currently building this out. Stay tuned!
       </Text>
       <FormControl maxWidth="400px" width="100%" mx="auto" mb={4}>
         <Input placeholder="Enter your email" value={email} onChange={(e) => setEmail(e.target.value)} size="md" />
