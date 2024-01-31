@@ -27,6 +27,9 @@ export async function query(text: string, params?: any[]): Promise<QueryResult<a
 }
 
 export async function insertEmail(userEmail: string) {
+  if (!isValidEmail(userEmail)) {
+    throw new Error("Invalid email address")
+  }
   const client = await pool.connect()
 
   try {
@@ -49,4 +52,9 @@ export async function insertEmail(userEmail: string) {
   } finally {
     client.release()
   }
+}
+
+function isValidEmail(email: string): boolean {
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return regex.test(email)
 }
