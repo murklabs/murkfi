@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Image } from "@chakra-ui/react"
+import GridListWith from "@/components/landing-page/card-wrapper"
 
 export default function HomePage() {
   return (
@@ -22,7 +23,7 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-
+      <GridListWith />
       <section className="w-full bg-[#f8f9fa] py-12 md:py-24 lg:py-32 xl:py-48">
         <div className="container flex px-4 md:px-6">
           <div className="w-full md:w-1/2">
