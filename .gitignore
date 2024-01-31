@@ -6,3 +6,4 @@ test-ledger/
 # Private keys
 devnet-wallet.json
 murk_protocol.json
+.envrc
