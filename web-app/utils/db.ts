@@ -1,5 +1,9 @@
 import { Pool, QueryResult } from "pg"
 
+interface PostgreSqlError extends Error {
+  code: string
+}
+
 const pool = new Pool({
   host: process.env.NEXT_PRIVATE_PGHOST,
   user: process.env.NEXT_PRIVATE_PGUSER,
@@ -29,7 +33,7 @@ export async function insertEmail(userEmail: string) {
     await client.query("BEGIN")
 
     const insertEmail = `
-        INSERT INTO emails (email)
+        INSERT INTO email_signups (email)
         VALUES ($1);
       `
 
@@ -37,6 +41,9 @@ export async function insertEmail(userEmail: string) {
 
     await client.query("COMMIT")
   } catch (err) {
+    if ((err as PostgreSqlError).code === "23505") {
+      throw new Error("Email already registered")
+    }
     await client.query("ROLLBACK")
     throw err
   } finally {

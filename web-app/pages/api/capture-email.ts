@@ -1,7 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { insertEmail } from "../../utils/db"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse<{ message: string }>) {
+interface ApiResponse {
+  message?: string
+  error?: string
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST")
     res.status(405).end(`Method ${req.method} Not Allowed`)
@@ -13,8 +18,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
   try {
     await insertEmail(email)
     res.status(200).json({ message: "Email added successfully" })
-  } catch (error) {
-    console.error("Error inserting user email:", error)
-    res.status(500).json({ message: "Error adding user email" })
+  } catch (error: any) {
+    if (error.message === "Email already registered") {
+      res.status(409).json({ error: error.message })
+    } else {
+      res.status(500).json({ error: "Internal server error" })
+    }
   }
 }

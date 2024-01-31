@@ -1,5 +1,10 @@
 import { Toast } from "@chakra-ui/react"
 
+interface ApiResponse {
+  message?: string
+  error?: string
+}
+
 export const emailSubscribe = async (
   email: string,
   setEmail: React.Dispatch<React.SetStateAction<string>>,
@@ -33,9 +38,10 @@ export const emailSubscribe = async (
         isClosable: true,
       })
     } else {
+      const error: ApiResponse = await response.json()
       toast({
         title: "Error",
-        description: `Something went wrong. ${response.statusText}`,
+        description: `Something went wrong. ${error.error}`,
         status: "error",
         duration: 3000,
         isClosable: true,
